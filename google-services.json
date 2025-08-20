@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "580198105709",
+    "project_id": "dentalflow-15562",
+    "storage_bucket": "dentalflow-15562.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:580198105709:android:b12959eaf662013bf23564",
+        "android_client_info": {
+          "package_name": "expo.android.package"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAg1gxpxa_H-hxIejT7WYaIBphPw0sLg1U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
