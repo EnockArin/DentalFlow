@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, FlatList, StyleSheet, Share, Alert, Modal, TouchableOpacity, ScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   List, 
   Text, 
@@ -26,10 +27,23 @@ const ShoppingListScreen = ({ navigation }) => {
   const [manualItems, setManualItems] = useState([]); // Manually added items
   const [addItemModalVisible, setAddItemModalVisible] = useState(false);
   const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
+  const [addItemOptionsVisible, setAddItemOptionsVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState('1');
   const [newItemNotes, setNewItemNotes] = useState('');
+  
+  // Saved shopping lists states
+  const [savedLists, setSavedLists] = useState([]);
+  const [saveListModalVisible, setSaveListModalVisible] = useState(false);
+  const [loadListModalVisible, setLoadListModalVisible] = useState(false);
+  const [listName, setListName] = useState('');
+  
+  // Quantity editing states
+  const [quantityEditModalVisible, setQuantityEditModalVisible] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editQuantity, setEditQuantity] = useState('');
+  const [customQuantities, setCustomQuantities] = useState({}); // Store custom quantities for low stock items
   
   // Filter items where current quantity is at or below minimum stock level
   const lowStockItems = items.filter(item => 
@@ -49,6 +63,11 @@ const ShoppingListScreen = ({ navigation }) => {
     ...lowStockItems.map(item => ({ ...item, type: 'lowstock' })),
     ...manualItems.map(item => ({ ...item, type: 'manual' }))
   ];
+
+  // Load saved lists on component mount
+  useEffect(() => {
+    loadSavedLists();
+  }, []);
 
   // Functions for manual item management
   const addManualItem = () => {
@@ -186,6 +205,180 @@ const ShoppingListScreen = ({ navigation }) => {
     return text;
   };
 
+  const exportShoppingListToCSV = async () => {
+    try {
+      if (combinedShoppingList.length === 0) {
+        Alert.alert('No Data', 'No items to export in shopping list');
+        return;
+      }
+
+      // CSV Header
+      let csvContent = 'Product Name,Type,Current Quantity,Min Stock Level,Suggested/Required Quantity,Priority,Location,Barcode,Notes\n';
+      
+      // CSV Data
+      combinedShoppingList.forEach(item => {
+        if (item.type === 'manual') {
+          // Manual items
+          const escapedName = `"${item.productName.replace(/"/g, '""')}"`;
+          const notes = (item.notes || '').replace(/"/g, '""');
+          const location = (item.location || '').replace(/"/g, '""');
+          const barcode = item.barcode || '';
+          
+          csvContent += `${escapedName},"Manual","-","-","${item.quantity}","Manual","${location}","${barcode}","${notes}"\n`;
+        } else {
+          // Low stock items
+          const escapedName = `"${item.productName.replace(/"/g, '""')}"`;
+          const priority = getItemPriority(item);
+          const priorityLabel = getPriorityLabel(priority);
+          const suggestedOrder = customQuantities[item.id] || Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
+          const location = (item.locationName || item.location || '').replace(/"/g, '""');
+          const barcode = item.barcode || '';
+          
+          csvContent += `${escapedName},"Low Stock","${item.currentQuantity}","${item.minStockLevel}","${suggestedOrder}","${priorityLabel}","${location}","${barcode}",""\n`;
+        }
+      });
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `shopping_list_export_${timestamp}.csv`;
+      
+      await Share.share({
+        message: csvContent,
+        title: `Shopping List Export - ${filename}`,
+        subject: filename,
+      });
+      
+    } catch (error) {
+      console.error('Error exporting shopping list CSV:', error);
+      Alert.alert('Export Error', 'Failed to export shopping list data');
+    }
+  };
+
+  // Saved shopping lists functions
+  const loadSavedLists = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('savedShoppingLists');
+      if (saved) {
+        setSavedLists(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.error('Error loading saved lists:', error);
+    }
+  };
+
+  const saveCurrentList = async () => {
+    if (!listName.trim()) {
+      Alert.alert('Invalid Name', 'Please enter a name for the shopping list.');
+      return;
+    }
+
+    if (combinedShoppingList.length === 0) {
+      Alert.alert('Empty List', 'Cannot save an empty shopping list.');
+      return;
+    }
+
+    try {
+      const newSavedList = {
+        id: `saved_${Date.now()}`,
+        name: listName.trim(),
+        dateCreated: new Date().toISOString(),
+        manualItems: [...manualItems],
+        lowStockSnapshot: lowStockItems.map(item => ({
+          ...item,
+          type: 'lowstock',
+          snapshotDate: new Date().toISOString()
+        })),
+        totalItems: combinedShoppingList.length
+      };
+
+      const updatedLists = [...savedLists, newSavedList];
+      await AsyncStorage.setItem('savedShoppingLists', JSON.stringify(updatedLists));
+      setSavedLists(updatedLists);
+      setListName('');
+      setSaveListModalVisible(false);
+      
+      Alert.alert(
+        'Success', 
+        `Shopping list "${newSavedList.name}" has been saved!`
+      );
+    } catch (error) {
+      console.error('Error saving list:', error);
+      Alert.alert('Error', 'Failed to save shopping list');
+    }
+  };
+
+  const loadSavedList = async (savedList) => {
+    try {
+      // Load manual items from saved list
+      setManualItems([...savedList.manualItems]);
+      setLoadListModalVisible(false);
+      
+      Alert.alert(
+        'Success', 
+        `Loaded shopping list "${savedList.name}"\n\n` +
+        `${savedList.manualItems.length} manual items have been added to your current list.\n\n` +
+        `Note: Low stock items are calculated dynamically based on current inventory levels.`
+      );
+    } catch (error) {
+      console.error('Error loading list:', error);
+      Alert.alert('Error', 'Failed to load shopping list');
+    }
+  };
+
+  const deleteSavedList = async (listId) => {
+    try {
+      const updatedLists = savedLists.filter(list => list.id !== listId);
+      await AsyncStorage.setItem('savedShoppingLists', JSON.stringify(updatedLists));
+      setSavedLists(updatedLists);
+      Alert.alert('Success', 'Shopping list deleted');
+    } catch (error) {
+      console.error('Error deleting list:', error);
+      Alert.alert('Error', 'Failed to delete shopping list');
+    }
+  };
+
+  // Quantity editing functions
+  const openQuantityEditor = (item) => {
+    setEditingItem(item);
+    if (item.type === 'manual') {
+      setEditQuantity(item.quantity.toString());
+    } else {
+      // For low stock items, use custom quantity if set, otherwise use suggested order quantity
+      const customQty = customQuantities[item.id];
+      const suggestedOrder = Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
+      setEditQuantity((customQty || suggestedOrder).toString());
+    }
+    setQuantityEditModalVisible(true);
+  };
+
+  const updateItemQuantity = () => {
+    if (!editQuantity.trim() || isNaN(parseInt(editQuantity)) || parseInt(editQuantity) <= 0) {
+      Alert.alert('Invalid Quantity', 'Please enter a valid positive number');
+      return;
+    }
+
+    const newQuantity = parseInt(editQuantity);
+
+    if (editingItem.type === 'manual') {
+      // Update manual item quantity
+      setManualItems(prev => prev.map(item => 
+        item.id === editingItem.id 
+          ? { ...item, quantity: newQuantity }
+          : item
+      ));
+    } else {
+      // For low stock items, store custom quantity in the customQuantities state
+      setCustomQuantities(prev => ({
+        ...prev,
+        [editingItem.id]: newQuantity
+      }));
+    }
+
+    setQuantityEditModalVisible(false);
+    setEditingItem(null);
+    setEditQuantity('');
+  };
+
   const handleShareShoppingList = async () => {
     try {
       const shoppingListText = generateShoppingListText();
@@ -229,27 +422,28 @@ const ShoppingListScreen = ({ navigation }) => {
           <Card.Content>
             <View style={styles.itemHeader}>
               <Text style={styles.itemName}>{item.productName}</Text>
-              <View style={styles.chipContainer}>
-                <Chip 
-                  mode="outlined" 
-                  style={[styles.priorityChip, { borderColor: '#6366f1', backgroundColor: '#6366f1' + '20' }]}
-                  textStyle={{ color: '#6366f1', fontSize: 10 }}
-                >
-                  MANUAL
-                </Chip>
-                <TouchableOpacity
-                  style={styles.deleteManualButton}
-                  onPress={() => removeManualItem(item.id)}
-                >
-                  <Text style={styles.deleteButtonText}>×</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.deleteManualButton}
+                onPress={() => removeManualItem(item.id)}
+              >
+                <Text style={styles.deleteButtonText}>×</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.itemDetails}>
               <Text style={styles.stockInfo}>
                 Quantity: {item.quantity}
               </Text>
+              <Button
+                mode="outlined"
+                compact
+                onPress={() => openQuantityEditor(item)}
+                style={styles.quantityButton}
+                contentStyle={styles.quantityButtonContent}
+                labelStyle={styles.quantityButtonLabel}
+              >
+                Edit Quantity
+              </Button>
               {item.notes && (
                 <Text style={styles.suggestion}>
                   Notes: {item.notes}
@@ -292,8 +486,18 @@ const ShoppingListScreen = ({ navigation }) => {
                 Current: {item.currentQuantity} | Min: {item.minStockLevel}
               </Text>
               <Text style={styles.suggestion}>
-                Suggested order: {suggestedOrder} units
+                Suggested order: {customQuantities[item.id] || suggestedOrder} units
               </Text>
+              <Button
+                mode="outlined"
+                compact
+                onPress={() => openQuantityEditor(item)}
+                style={styles.quantityButton}
+                contentStyle={styles.quantityButtonContent}
+                labelStyle={styles.quantityButtonLabel}
+              >
+                Edit Quantity
+              </Button>
               {item.location && (
                 <Text style={styles.location}>Location: {item.location}</Text>
               )}
@@ -352,13 +556,38 @@ const ShoppingListScreen = ({ navigation }) => {
           </View>
 
           {combinedShoppingList.length > 0 && (
+            <View style={styles.summaryButtonsContainer}>
+              <Button
+                mode="contained"
+                onPress={handleShareShoppingList}
+                style={[styles.summaryButton, styles.shareButton]}
+              >
+                Share
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={() => setSaveListModalVisible(true)}
+                style={[styles.summaryButton, styles.saveButton]}
+              >
+                Save
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={exportShoppingListToCSV}
+                style={[styles.summaryButton, styles.csvExportButton]}
+              >
+                Export CSV
+              </Button>
+            </View>
+          )}
+          
+          {savedLists.length > 0 && (
             <Button
-              mode="contained"
-              onPress={handleShareShoppingList}
-              style={styles.shareButton}
-              
+              mode="text"
+              onPress={() => setLoadListModalVisible(true)}
+              style={styles.loadButton}
             >
-              Share Shopping List
+              Load Saved List ({savedLists.length})
             </Button>
           )}
         </Card.Content>
@@ -414,12 +643,12 @@ const ShoppingListScreen = ({ navigation }) => {
       <View style={styles.fabContainer}>
         <View style={styles.fabWithLabel}>
           <View style={styles.fabLabelContainer}>
-            <Text style={styles.fabLabel}>Add Custom Item</Text>
+            <Text style={styles.fabLabel}>Add Item</Text>
           </View>
           <FAB
             style={[styles.fab, { backgroundColor: colors.primary }]}
             icon={() => <Text style={styles.fabIcon}>+</Text>}
-            onPress={() => setAddItemModalVisible(true)}
+            onPress={() => setAddItemOptionsVisible(true)}
             color={colors.white}
           />
         </View>
@@ -615,6 +844,328 @@ const ShoppingListScreen = ({ navigation }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Add Item Options Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={addItemOptionsVisible}
+        onRequestClose={() => setAddItemOptionsVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setAddItemOptionsVisible(false)}
+        >
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Surface style={styles.modalSurface}>
+              <View style={styles.modalContent}>
+                {/* Modal Header */}
+                <View style={styles.modalHeader}>
+                  <Title style={styles.modalTitle}>Add Item</Title>
+                  <Paragraph style={styles.modalSubtitle}>
+                    Choose how you'd like to add a new item to your shopping list
+                  </Paragraph>
+                </View>
+
+                {/* Options */}
+                <View style={styles.addItemOptionsContainer}>
+                  <TouchableOpacity 
+                    style={styles.addItemOption}
+                    onPress={() => {
+                      setAddItemOptionsVisible(false);
+                      navigation.navigate('Scanner');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Text style={styles.optionIcon}>📱</Text>
+                    </View>
+                    <View style={styles.optionContent}>
+                      <Title style={styles.optionTitle}>Scan Barcode</Title>
+                      <Paragraph style={styles.optionDescription}>
+                        Use camera to scan barcode and add to shopping list
+                      </Paragraph>
+                    </View>
+                    <Text style={styles.optionChevron}>›</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.addItemOption}
+                    onPress={() => {
+                      setAddItemOptionsVisible(false);
+                      setAddItemModalVisible(true);
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Text style={styles.optionIcon}>✏️</Text>
+                    </View>
+                    <View style={styles.optionContent}>
+                      <Title style={styles.optionTitle}>Manual Entry</Title>
+                      <Paragraph style={styles.optionDescription}>
+                        Manually enter custom item details for shopping list
+                      </Paragraph>
+                    </View>
+                    <Text style={styles.optionChevron}>›</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalButtons}>
+                  <Button
+                    mode="outlined"
+                    onPress={() => setAddItemOptionsVisible(false)}
+                    style={styles.cancelButton}
+                  >
+                    Cancel
+                  </Button>
+                </View>
+              </View>
+            </Surface>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Save Shopping List Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={saveListModalVisible}
+        onRequestClose={() => setSaveListModalVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSaveListModalVisible(false)}
+        >
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Surface style={styles.modalSurface}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Title style={styles.modalTitle}>Save Shopping List</Title>
+                  <Paragraph style={styles.modalSubtitle}>
+                    Save your current shopping list to load later
+                  </Paragraph>
+                </View>
+
+                <CustomTextInput
+                  label="List Name"
+                  value={listName}
+                  onChangeText={setListName}
+                  mode="outlined"
+                  style={styles.input}
+                  placeholder="e.g., Monthly Restocking, Emergency Supplies"
+                  autoComplete="off"
+                  textContentType="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  right={null}
+                />
+
+                <View style={styles.saveListInfo}>
+                  <Text style={styles.saveInfoTitle}>What will be saved:</Text>
+                  <Text style={styles.saveInfoText}>• {manualItems.length} manual items</Text>
+                  <Text style={styles.saveInfoText}>• Current low stock snapshot ({lowStockItems.length} items)</Text>
+                  <Text style={styles.saveInfoNote}>
+                    Note: Low stock items are recalculated when loading, manual items are restored exactly.
+                  </Text>
+                </View>
+
+                <View style={styles.modalButtons}>
+                  <Button
+                    mode="outlined"
+                    onPress={() => {
+                      setListName('');
+                      setSaveListModalVisible(false);
+                    }}
+                    style={styles.cancelButton}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    mode="contained"
+                    onPress={saveCurrentList}
+                    style={styles.addButton}
+                  >
+                    Save List
+                  </Button>
+                </View>
+              </View>
+            </Surface>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Load Shopping List Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={loadListModalVisible}
+        onRequestClose={() => setLoadListModalVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setLoadListModalVisible(false)}
+        >
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Surface style={styles.modalSurface}>
+              <ScrollView 
+                style={styles.modalScrollView}
+                contentContainerStyle={styles.modalScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.modalContent}>
+                  <View style={styles.modalHeader}>
+                    <Title style={styles.modalTitle}>Load Saved Shopping List</Title>
+                    <Paragraph style={styles.modalSubtitle}>
+                      Select a saved shopping list to load
+                    </Paragraph>
+                  </View>
+
+                  {savedLists.length === 0 ? (
+                    <View style={styles.noSavedListsContainer}>
+                      <Text style={styles.noSavedListsText}>No saved shopping lists found.</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.savedListsContainer}>
+                      {savedLists.map((savedList) => (
+                        <View key={savedList.id} style={styles.savedListItem}>
+                          <TouchableOpacity 
+                            style={styles.savedListContent}
+                            onPress={() => loadSavedList(savedList)}
+                          >
+                            <View style={styles.savedListInfo}>
+                              <Text style={styles.savedListName}>{savedList.name}</Text>
+                              <Text style={styles.savedListDate}>
+                                Created: {new Date(savedList.dateCreated).toLocaleDateString()}
+                              </Text>
+                              <Text style={styles.savedListItems}>
+                                {savedList.totalItems} items • {savedList.manualItems.length} manual
+                              </Text>
+                            </View>
+                            <Text style={styles.savedListChevron}>›</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.deleteListButton}
+                            onPress={() => {
+                              Alert.alert(
+                                'Delete List',
+                                `Delete "${savedList.name}"?`,
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: 'Delete', style: 'destructive', onPress: () => deleteSavedList(savedList.id) }
+                                ]
+                              );
+                            }}
+                          >
+                            <Text style={styles.deleteButtonText}>×</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <View style={styles.modalButtons}>
+                    <Button
+                      mode="outlined"
+                      onPress={() => setLoadListModalVisible(false)}
+                      style={styles.cancelButton}
+                    >
+                      Close
+                    </Button>
+                  </View>
+                </View>
+              </ScrollView>
+            </Surface>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Edit Quantity Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={quantityEditModalVisible}
+        onRequestClose={() => setQuantityEditModalVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setQuantityEditModalVisible(false)}
+        >
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Surface style={styles.modalSurface}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Title style={styles.modalTitle}>
+                    Edit {editingItem?.type === 'manual' ? 'Quantity' : 'Suggested Order'}
+                  </Title>
+                  <Paragraph style={styles.modalSubtitle}>
+                    {editingItem?.productName}
+                  </Paragraph>
+                </View>
+
+                <CustomTextInput
+                  label={editingItem?.type === 'manual' ? 'Quantity' : 'Suggested Order Quantity'}
+                  value={editQuantity}
+                  onChangeText={setEditQuantity}
+                  mode="outlined"
+                  keyboardType="numeric"
+                  style={styles.input}
+                  autoComplete="off"
+                  textContentType="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  right={null}
+                />
+
+                {editingItem?.type !== 'manual' && (
+                  <View style={styles.quantityInfo}>
+                    <Text style={styles.quantityInfoTitle}>Item Details:</Text>
+                    <Text style={styles.quantityInfoText}>Current Stock: {editingItem?.currentQuantity}</Text>
+                    <Text style={styles.quantityInfoText}>Minimum Level: {editingItem?.minStockLevel}</Text>
+                    <Text style={styles.quantityInfoText}>
+                      Default Suggestion: {editingItem ? Math.max(editingItem.minStockLevel * 2 - editingItem.currentQuantity, editingItem.minStockLevel) : 0}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.modalButtons}>
+                  <Button
+                    mode="outlined"
+                    onPress={() => {
+                      setQuantityEditModalVisible(false);
+                      setEditingItem(null);
+                      setEditQuantity('');
+                    }}
+                    style={styles.cancelButton}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    mode="contained"
+                    onPress={updateItemQuantity}
+                    style={styles.addButton}
+                  >
+                    Update
+                  </Button>
+                </View>
+              </View>
+            </Surface>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -664,8 +1215,26 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
-  shareButton: {
+  summaryButtonsContainer: {
+    flexDirection: 'row',
+    gap: 6,
     marginTop: 8,
+  },
+  summaryButton: {
+    flex: 1,
+  },
+  shareButton: {
+    // Styles handled by summaryButton
+  },
+  saveButton: {
+    // Styles handled by summaryButton
+  },
+  csvExportButton: {
+    borderColor: colors.success || '#4caf50',
+  },
+  loadButton: {
+    marginTop: 8,
+    alignSelf: 'center',
   },
   list: {
     flex: 1,
@@ -718,7 +1287,27 @@ const styles = StyleSheet.create({
     color: '#888',
     fontFamily: 'monospace',
   },
+  quantityButton: {
+    borderColor: colors.primary || '#2196F3',
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 8,
+    minWidth: 120,
+  },
+  quantityButtonContent: {
+    height: 52,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityButtonLabel: {
+    fontSize: 14,
+    marginHorizontal: 0,
+    fontWeight: '500',
+    lineHeight: 22,
+  },
   editButton: {
+    borderColor: colors.secondary || '#666',
     alignSelf: 'flex-start',
   },
   emptyCard: {
@@ -984,6 +1573,154 @@ const styles = StyleSheet.create({
     color: '#888',
     fontFamily: 'monospace',
     marginTop: 2,
+  },
+  // Add Item Options Modal Styles
+  addItemOptionsContainer: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  addItemOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  optionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  optionIcon: {
+    fontSize: 24,
+  },
+  optionContent: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary || '#333',
+    marginBottom: 4,
+  },
+  optionDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  optionChevron: {
+    fontSize: 24,
+    color: '#999',
+    marginLeft: 8,
+  },
+  // Save/Load Lists Modal Styles
+  saveListInfo: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  saveInfoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary || '#333',
+    marginBottom: 8,
+  },
+  saveInfoText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  saveInfoNote: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: 8,
+    lineHeight: 16,
+  },
+  savedListsContainer: {
+    gap: 8,
+    marginBottom: 20,
+  },
+  savedListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  savedListContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  savedListInfo: {
+    flex: 1,
+  },
+  savedListName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary || '#333',
+    marginBottom: 4,
+  },
+  savedListDate: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  savedListItems: {
+    fontSize: 12,
+    color: '#888',
+  },
+  savedListChevron: {
+    fontSize: 20,
+    color: '#999',
+    marginLeft: 8,
+  },
+  deleteListButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f44336',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  noSavedListsContainer: {
+    alignItems: 'center',
+    padding: 20,
+    marginBottom: 20,
+  },
+  noSavedListsText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  // Quantity editing styles
+  quantityInfo: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  quantityInfoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary || '#333',
+    marginBottom: 8,
+  },
+  quantityInfoText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
 });
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet, Alert, Animated, TouchableOpacity, Modal } from 'react-native';
+import { View, FlatList, StyleSheet, Alert, Animated, TouchableOpacity, Modal, Share } from 'react-native';
 import { 
   Searchbar, 
   List, 
@@ -41,6 +41,9 @@ const InventoryListScreen = ({ navigation, route }) => {
   
   // Checkout Options Modal State
   const [checkoutOptionsVisible, setCheckoutOptionsVisible] = useState(false);
+  
+  // Add Item Options Modal State
+  const [addItemOptionsVisible, setAddItemOptionsVisible] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -225,6 +228,45 @@ const InventoryListScreen = ({ navigation, route }) => {
   const formatExpiryDate = (expiryDate) => {
     if (!expiryDate) return 'No expiry';
     return expiryDate.toLocaleDateString();
+  };
+
+  const exportToCSV = async () => {
+    try {
+      const filteredItems = getFilteredItems();
+      
+      if (filteredItems.length === 0) {
+        Alert.alert('No Data', 'No items to export');
+        return;
+      }
+
+      // CSV Header
+      let csvContent = 'Product Name,Barcode,Current Quantity,Min Stock Level,Location,Expiry Date,Status\n';
+      
+      // CSV Data
+      filteredItems.forEach(item => {
+        const status = getItemStatus(item);
+        const escapedName = `"${item.productName.replace(/"/g, '""')}"`;
+        const barcode = item.barcode || '';
+        const location = item.locationName || item.location || '';
+        const expiryDate = formatExpiryDate(item.expiryDate);
+        
+        csvContent += `${escapedName},${barcode},${item.currentQuantity},${item.minStockLevel},"${location}","${expiryDate}","${status.label}"\n`;
+      });
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `inventory_export_${timestamp}.csv`;
+      
+      await Share.share({
+        message: csvContent,
+        title: `Inventory Export - ${filename}`,
+        subject: filename,
+      });
+      
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      Alert.alert('Export Error', 'Failed to export inventory data');
+    }
   };
 
   const renderItem = ({ item, index }) => {
@@ -432,6 +474,19 @@ const InventoryListScreen = ({ navigation, route }) => {
           Expiring ({expiringCount})
         </Chip>
       </View>
+      
+      {/* Export Button */}
+      <View style={styles.exportContainer}>
+        <Button
+          mode="outlined"
+          compact
+          onPress={exportToCSV}
+          style={styles.exportButton}
+          contentStyle={styles.exportButtonContent}
+        >
+          Export CSV
+        </Button>
+      </View>
 
       {/* Content */}
       {filteredItems.length === 0 ? (
@@ -467,7 +522,7 @@ const InventoryListScreen = ({ navigation, route }) => {
       {/* Floating Action Buttons */}
       <TouchableOpacity
         style={[styles.fabAdd, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate('ItemDetail')}
+        onPress={() => setAddItemOptionsVisible(true)}
         activeOpacity={0.8}
       >
         <Text style={styles.fabIcon}>+</Text>
@@ -688,6 +743,85 @@ const InventoryListScreen = ({ navigation, route }) => {
           </Surface>
         </View>
       </Modal>
+
+      {/* Add Item Options Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={addItemOptionsVisible}
+        onRequestClose={() => setAddItemOptionsVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Surface style={styles.modalSurface}>
+            <View style={styles.modalContent}>
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderContent}>
+                  <View style={styles.modalHeaderIcon}>
+                    <Text style={styles.addItemIcon}>📦</Text>
+                  </View>
+                  <View style={styles.modalHeaderText}>
+                    <Title style={styles.modalTitle}>Add Item</Title>
+                    <Paragraph style={styles.modalSubtitle}>
+                      Choose how you'd like to add a new item
+                    </Paragraph>
+                  </View>
+                </View>
+              </View>
+
+              {/* Options */}
+              <View style={styles.addItemOptionsContainer}>
+                <TouchableOpacity 
+                  style={styles.addItemOption}
+                  onPress={() => {
+                    setAddItemOptionsVisible(false);
+                    navigation.navigate('Scanner');
+                  }}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Text style={styles.optionIcon}>📱</Text>
+                  </View>
+                  <View style={styles.optionContent}>
+                    <Title style={styles.optionTitle}>Scan Barcode</Title>
+                    <Paragraph style={styles.optionDescription}>
+                      Use camera to scan barcode and auto-fill item details
+                    </Paragraph>
+                  </View>
+                  <Text style={styles.optionChevron}>›</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.addItemOption}
+                  onPress={() => {
+                    setAddItemOptionsVisible(false);
+                    navigation.navigate('ItemDetail');
+                  }}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Text style={styles.optionIcon}>✏️</Text>
+                  </View>
+                  <View style={styles.optionContent}>
+                    <Title style={styles.optionTitle}>Manual Entry</Title>
+                    <Paragraph style={styles.optionDescription}>
+                      Manually enter all item details using a form
+                    </Paragraph>
+                  </View>
+                  <Text style={styles.optionChevron}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Button
+                mode="text"
+                onPress={() => setAddItemOptionsVisible(false)}
+                style={styles.cancelButton}
+                textColor={colors.textSecondary}
+              >
+                Cancel
+              </Button>
+            </View>
+          </Surface>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -715,6 +849,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
+  },
+  exportContainer: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  exportButton: {
+    borderColor: colors.success || '#4caf50',
+    minWidth: 100,
+  },
+  exportButtonContent: {
+    height: 36,
+    paddingHorizontal: 16,
   },
   filterChip: {
     borderRadius: borderRadius.lg,
@@ -1001,6 +1148,24 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   checkoutOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  // Add Item Options Modal Styles
+  addItemIcon: {
+    fontSize: 24,
+    textAlign: 'center',
+  },
+  addItemOptionsContainer: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  addItemOption: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,

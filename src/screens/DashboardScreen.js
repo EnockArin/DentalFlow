@@ -106,12 +106,6 @@ const DashboardScreen = ({ navigation }) => {
       color: colors.danger,
     },
     {
-      title: 'View Inventory',
-      action: () => navigation.navigate('Inventory'),
-      mode: 'outlined',
-      color: colors.primary,
-    },
-    {
       title: `Shopping List (${lowStockItems.length})`,
       action: () => navigation.navigate('ShoppingList'),
       mode: 'outlined',
@@ -138,29 +132,59 @@ const DashboardScreen = ({ navigation }) => {
 
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
-          <Card style={[styles.statCard, styles.totalItemsCard]}>
-            <Card.Content style={styles.statContent}>
-              <View style={styles.statIconContainer}>
-                <Text style={styles.statIcon}>📦</Text>
-              </View>
-              <Title style={[styles.statNumber, { color: colors.primary }]}>
-                {items.length}
-              </Title>
-              <Paragraph style={styles.statLabel}>Total Items</Paragraph>
-            </Card.Content>
-          </Card>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Inventory')}
+            activeOpacity={0.7}
+            style={styles.statCardWrapper}
+          >
+            <Card style={[styles.statCard, styles.totalItemsCard]}>
+              <Card.Content style={styles.statContent}>
+                <View style={styles.statIconContainer}>
+                  <Text style={styles.statIcon}>📦</Text>
+                </View>
+                <Title style={[styles.statNumber, { color: colors.primary }]}>
+                  {items.length}
+                </Title>
+                <Paragraph style={styles.statLabel}>View Inventory</Paragraph>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
 
-          <Card style={[styles.statCard, styles.lowStockCard]}>
-            <Card.Content style={styles.statContent}>
-              <View style={styles.statIconContainer}>
-                <Text style={styles.statIcon}>⚠️</Text>
-              </View>
-              <Title style={[styles.statNumber, { color: colors.warning }]}>
-                {lowStockItems.length}
-              </Title>
-              <Paragraph style={styles.statLabel}>Low Stock</Paragraph>
-            </Card.Content>
-          </Card>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Inventory', { filter: 'lowStock' })}
+            activeOpacity={0.7}
+            style={styles.statCardWrapper}
+          >
+            <Card style={[styles.statCard, styles.lowStockCard]}>
+              <Card.Content style={styles.statContent}>
+                <View style={styles.statIconContainer}>
+                  <Text style={styles.statIcon}>⚠️</Text>
+                </View>
+                <Title style={[styles.statNumber, { color: colors.warning }]}>
+                  {lowStockItems.length}
+                </Title>
+                <Paragraph style={styles.statLabel}>Low Stock</Paragraph>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Inventory', { filter: 'expiring' })}
+            activeOpacity={0.7}
+            style={styles.statCardWrapper}
+          >
+            <Card style={[styles.statCard, styles.expiringCard]}>
+              <Card.Content style={styles.statContent}>
+                <View style={styles.statIconContainer}>
+                  <Text style={styles.statIcon}>⏰</Text>
+                </View>
+                <Title style={[styles.statNumber, { color: colors.danger }]}>
+                  {expiringItems.length}
+                </Title>
+                <Paragraph style={styles.statLabel}>Expiring Soon</Paragraph>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
         </View>
 
         {/* Quick Actions */}
@@ -320,10 +344,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: spacing.xl,
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  statCardWrapper: {
+    flex: 1,
   },
   statCard: {
-    flex: 1,
     borderRadius: borderRadius.lg,
     ...shadows.medium,
   },
@@ -336,6 +362,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warningLight + '10',
     borderLeftWidth: 4,
     borderLeftColor: colors.warning,
+  },
+  expiringCard: {
+    backgroundColor: colors.dangerLight + '10',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.danger,
   },
   statContent: {
     alignItems: 'center',
