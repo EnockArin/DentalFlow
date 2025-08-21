@@ -1,25 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Animated, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Animated, TouchableOpacity, Image, Text } from 'react-native';
 import { 
-  TextInput, 
   Button, 
   Card, 
   Title,
   HelperText,
   Divider,
-  IconButton,
   Paragraph,
   Surface,
-  Chip
+  Chip,
+  TextInput
 } from 'react-native-paper';
+import CustomTextInput from '../components/common/CustomTextInput';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { addDoc, collection, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useSelector } from 'react-redux';
 import { colors, spacing, borderRadius, typography, shadows, components } from '../constants/theme';
+import { globalFormStyles } from '../styles/globalFormFixes';
 
 const ItemDetailScreen = ({ navigation, route }) => {
   const { user } = useSelector((state) => state.auth);
+  const { locations } = useSelector((state) => state.locations);
   const item = route.params?.item;
   const scannedBarcode = route.params?.barcode;
   const isEditing = !!item;
@@ -29,15 +31,42 @@ const ItemDetailScreen = ({ navigation, route }) => {
     barcode: '',
     currentQuantity: '',
     minStockLevel: '',
-    location: '',
+    locationId: '',
+    locationName: '',
+    cost: '',
+    description: '',
+    imageUri: null,
     expiryDate: null,
   });
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
+
+  // Initialize form data when editing
+  useEffect(() => {
+    if (item) {
+      setFormData({
+        productName: item.productName || '',
+        barcode: item.barcode || '',
+        currentQuantity: '', // Leave blank when editing since we're adding stock
+        minStockLevel: item.minStockLevel?.toString() || '',
+        locationId: item.locationId || '',
+        locationName: item.locationName || item.location || '',
+        cost: item.cost?.toString() || '',
+        description: item.description || '',
+        imageUri: item.imageUri || null,
+        expiryDate: item.expiryDate || null,
+      });
+    }
+    
+    if (scannedBarcode) {
+      setFormData(prev => ({ ...prev, barcode: scannedBarcode }));
+    }
+  }, [item, scannedBarcode]);
 
   useEffect(() => {
     Animated.parallel([
@@ -59,9 +88,11 @@ const ItemDetailScreen = ({ navigation, route }) => {
       setFormData({
         productName: item.productName || '',
         barcode: item.barcode || '',
-        currentQuantity: item.currentQuantity?.toString() || '',
+        currentQuantity: '', // Leave blank when editing since we're adding stock
         minStockLevel: item.minStockLevel?.toString() || '',
-        location: item.location || '',
+        locationId: item.locationId || '',
+        locationName: item.locationName || item.location || '',
+        cost: item.cost?.toString() || '',
         expiryDate: item.expiryDate || null,
       });
     } else if (scannedBarcode) {
@@ -95,6 +126,10 @@ const ItemDetailScreen = ({ navigation, route }) => {
       newErrors.barcode = 'Barcode must contain only numbers';
     }
 
+    if (formData.cost && (isNaN(parseFloat(formData.cost)) || parseFloat(formData.cost) < 0)) {
+      newErrors.cost = 'Cost must be a valid positive number';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -108,19 +143,29 @@ const ItemDetailScreen = ({ navigation, route }) => {
 
     try {
       const itemData = {
-        productName: formData.productName.trim(),
-        barcode: formData.barcode.trim(),
-        currentQuantity: parseInt(formData.currentQuantity),
-        minStockLevel: parseInt(formData.minStockLevel),
-        location: formData.location.trim(),
+        productName: (formData.productName || '').trim(),
+        name: (formData.productName || '').trim(), // Duplicate for compatibility
+        barcode: (formData.barcode || '').trim(),
+        currentQuantity: parseInt(formData.currentQuantity) || 0,
+        minStockLevel: parseInt(formData.minStockLevel) || 0,
+        locationId: formData.locationId || null,
+        locationName: (formData.locationName || '').trim(),
+        location: (formData.locationName || '').trim(), // Legacy field for compatibility
+        cost: parseFloat(formData.cost) || 0,
+        description: (formData.description || '').trim(),
+        imageUri: formData.imageUri || null,
         expiryDate: formData.expiryDate ? Timestamp.fromDate(formData.expiryDate) : null,
         practiceId: user?.uid, // Link to user's practice
         lastUpdated: Timestamp.now(),
       };
 
       if (isEditing) {
+        // When editing, add the entered quantity to existing stock
+        const quantityToAdd = parseInt(formData.currentQuantity) || 0;
+        itemData.currentQuantity = (item.currentQuantity || 0) + quantityToAdd;
+        
         await updateDoc(doc(db, 'inventory', item.id), itemData);
-        Alert.alert('Success', 'Item updated successfully');
+        Alert.alert('Success', `Item updated successfully. Added ${quantityToAdd} to stock.`);
       } else {
         itemData.createdAt = Timestamp.now();
         await addDoc(collection(db, 'inventory'), itemData);
@@ -172,10 +217,10 @@ const ItemDetailScreen = ({ navigation, route }) => {
         <Surface style={styles.headerCard}>
           <View style={styles.header}>
             <View style={styles.headerContent}>
-              <IconButton
+              <TouchableOpacity
                 icon={isEditing ? 'pencil' : 'plus-circle'}
                 size={32}
-                iconColor={colors.primary}
+                
                 style={styles.headerIcon}
               />
               <View style={styles.headerText}>
@@ -189,7 +234,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
             </View>
             {scannedBarcode && (
               <Chip 
-                icon="barcode-scan" 
+                 
                 style={styles.scannedChip}
                 textStyle={styles.scannedChipText}
               >
@@ -201,24 +246,24 @@ const ItemDetailScreen = ({ navigation, route }) => {
 
         {/* Form Section */}
         <Card style={styles.formCard}>
-          <Card.Content style={styles.formContent}>
+          <Card.Content style={[styles.formContent, globalFormStyles.formContainer]}>
             {/* Product Information */}
             <View style={styles.section}>
               <Title style={styles.sectionTitle}>Product Information</Title>
               <Divider style={styles.sectionDivider} />
               
-              <TextInput
+              <CustomTextInput
                 label="Product Name"
                 value={formData.productName}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, productName: text }))}
                 mode="outlined"
-                style={styles.input}
+                style={[styles.input, globalFormStyles.hideValidationIndicators]}
                 error={!!errors.productName}
-                left={<TextInput.Icon icon="package" />}
+                left={<TextInput.Icon  />}
                 outlineColor={colors.borderLight}
                 activeOutlineColor={colors.primary}
-                autoComplete="new-password"
-                textContentType="oneTimeCode"
+                autoComplete="off"
+                textContentType="none"
                 autoCorrect={false}
                 spellCheck={false}
                 right={null}
@@ -227,24 +272,24 @@ const ItemDetailScreen = ({ navigation, route }) => {
                 {errors.productName}
               </HelperText>
 
-              <TextInput
+              <CustomTextInput
                 label="Barcode (Optional)"
                 value={formData.barcode}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, barcode: text }))}
                 mode="outlined"
-                style={styles.input}
+                style={[styles.input, globalFormStyles.hideValidationIndicators]}
                 keyboardType="numeric"
                 error={!!errors.barcode}
-                left={<TextInput.Icon icon="barcode" />}
+                left={<TextInput.Icon  />}
                 outlineColor={colors.borderLight}
                 activeOutlineColor={colors.primary}
-                autoComplete="new-password"
-                textContentType="oneTimeCode"
+                autoComplete="off"
+                textContentType="none"
                 autoCorrect={false}
                 spellCheck={false}
                 right={
                   <TextInput.Icon 
-                    icon="barcode-scan" 
+                     
                     onPress={() => navigation.navigate('Scanner', { returnScreen: 'ItemDetail' })}
                   />
                 }
@@ -261,14 +306,13 @@ const ItemDetailScreen = ({ navigation, route }) => {
               
               <View style={styles.row}>
                 <View style={styles.halfInput}>
-                  <TextInput
-                    label="Current Quantity"
+                  <CustomTextInput
+                    label={isEditing ? "Stock to Add" : "Initial Stock Quantity"}
                     value={formData.currentQuantity}
                     onChangeText={(text) => setFormData(prev => ({ ...prev, currentQuantity: text }))}
                     mode="outlined"
                     keyboardType="numeric"
                     error={!!errors.currentQuantity}
-                    left={<TextInput.Icon icon="counter" />}
                     outlineColor={colors.borderLight}
                     activeOutlineColor={colors.primary}
                     autoComplete="off"
@@ -280,17 +324,22 @@ const ItemDetailScreen = ({ navigation, route }) => {
                   <HelperText type="error" visible={!!errors.currentQuantity} style={styles.helperText}>
                     {errors.currentQuantity}
                   </HelperText>
+                  {isEditing && (
+                    <HelperText type="info" style={styles.helperText}>
+                      Current stock: {item.currentQuantity || 0}. Enter amount to add.
+                    </HelperText>
+                  )}
                 </View>
 
                 <View style={styles.halfInput}>
-                  <TextInput
+                  <CustomTextInput
                     label="Min Stock Level"
                     value={formData.minStockLevel}
                     onChangeText={(text) => setFormData(prev => ({ ...prev, minStockLevel: text }))}
                     mode="outlined"
                     keyboardType="numeric"
                     error={!!errors.minStockLevel}
-                    left={<TextInput.Icon icon="alert-outline" />}
+                    left={<TextInput.Icon  />}
                     outlineColor={colors.borderLight}
                     activeOutlineColor={colors.primary}
                     autoComplete="off"
@@ -311,30 +360,88 @@ const ItemDetailScreen = ({ navigation, route }) => {
               <Title style={styles.sectionTitle}>Location & Expiry</Title>
               <Divider style={styles.sectionDivider} />
               
-              <TextInput
+              <CustomTextInput
                 label="Storage Location (Optional)"
                 value={formData.location}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, location: text }))}
                 mode="outlined"
-                style={styles.input}
+                style={[styles.input, globalFormStyles.hideValidationIndicators]}
                 placeholder="e.g., Cabinet A, Drawer 2, Shelf B"
-                left={<TextInput.Icon icon="map-marker" />}
+                left={<TextInput.Icon  />}
                 outlineColor={colors.borderLight}
                 activeOutlineColor={colors.primary}
-                autoComplete="new-password"
-                textContentType="oneTimeCode"
+                autoComplete="off"
+                textContentType="none"
                 autoCorrect={false}
                 spellCheck={false}
                 right={null}
               />
 
+              <CustomTextInput
+                label="Cost per Unit (£)"
+                value={formData.cost}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, cost: text }))}
+                mode="outlined"
+                style={[styles.input, globalFormStyles.hideValidationIndicators]}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                error={!!errors.cost}
+                left={<Text style={styles.currencyIcon}>£</Text>}
+                outlineColor={colors.borderLight}
+                activeOutlineColor={colors.primary}
+                autoComplete="off"
+                textContentType="none"
+                autoCorrect={false}
+                spellCheck={false}
+                right={null}
+              />
+              <HelperText type="error" visible={!!errors.cost} style={styles.helperText}>
+                {errors.cost}
+              </HelperText>
+
+              <CustomTextInput
+                label="Description (Optional)"
+                value={formData.description}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
+                mode="outlined"
+                multiline
+                numberOfLines={3}
+                style={[styles.input, styles.descriptionInput, globalFormStyles.hideValidationIndicators]}
+                placeholder="Add notes, specifications, or other details about this item..."
+                outlineColor={colors.borderLight}
+                activeOutlineColor={colors.primary}
+                autoComplete="off"
+                textContentType="none"
+                autoCorrect={false}
+                spellCheck={false}
+                right={null}
+              />
+
+              {/* Image Picker */}
+              <TouchableOpacity onPress={() => Alert.alert('Image Picker', 'Image picker functionality will be added here')}>
+                <Surface style={styles.imagePickerSurface}>
+                  <View style={styles.imagePickerContent}>
+                    {formData.imageUri ? (
+                      <Image source={{ uri: formData.imageUri }} style={styles.itemImage} />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <Text style={styles.imagePlaceholderIcon}>📸</Text>
+                        <Paragraph style={styles.imagePlaceholderText}>
+                          Tap to add item photo
+                        </Paragraph>
+                      </View>
+                    )}
+                  </View>
+                </Surface>
+              </TouchableOpacity>
+
               <TouchableOpacity onPress={showDatePicker}>
                 <Surface style={styles.datePickerSurface}>
                   <View style={styles.datePickerContent}>
-                    <IconButton
-                      icon="calendar"
+                    <TouchableOpacity
+                      
                       size={24}
-                      iconColor={formData.expiryDate ? colors.primary : colors.textSecondary}
+                      
                       style={styles.dateIcon}
                     />
                     <View style={styles.dateTextContainer}>
@@ -346,10 +453,10 @@ const ItemDetailScreen = ({ navigation, route }) => {
                         {formatDate(formData.expiryDate)}
                       </Title>
                     </View>
-                    <IconButton
-                      icon="chevron-right"
+                    <TouchableOpacity
+                      
                       size={20}
-                      iconColor={colors.textSecondary}
+                      
                     />
                   </View>
                 </Surface>
@@ -368,18 +475,19 @@ const ItemDetailScreen = ({ navigation, route }) => {
 
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
-          <Button
-            mode="contained"
+          <TouchableOpacity
             onPress={handleSave}
-            loading={loading}
             disabled={loading}
-            style={styles.saveButton}
-            contentStyle={styles.buttonContent}
-            buttonColor={colors.primary}
-            icon={isEditing ? 'content-save' : 'plus'}
+            style={[styles.saveButton, loading && styles.disabledButton]}
+            activeOpacity={0.8}
           >
-            {loading ? 'Saving...' : (isEditing ? 'Update Item' : 'Add Item')}
-          </Button>
+            <Text style={styles.saveButtonIcon}>
+              {loading ? '⏳' : (isEditing ? '💾' : '+')}
+            </Text>
+            <Text style={styles.saveButtonText}>
+              {loading ? 'Saving...' : (isEditing ? 'Update Item' : 'Add Item')}
+            </Text>
+          </TouchableOpacity>
 
           <Button
             mode="outlined"
@@ -510,12 +618,71 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.medium,
   },
+  // New field styles
+  descriptionInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+    paddingTop: spacing.md,
+  },
+  imagePickerSurface: {
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderStyle: 'dashed',
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  imagePickerContent: {
+    minHeight: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePlaceholderIcon: {
+    fontSize: 32,
+    marginBottom: spacing.xs,
+  },
+  imagePlaceholderText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  itemImage: {
+    width: 120,
+    height: 120,
+    borderRadius: borderRadius.md,
+    resizeMode: 'cover',
+  },
   buttonContainer: {
     gap: spacing.md,
     paddingBottom: spacing.xl,
   },
   saveButton: {
+    backgroundColor: colors.primary,
     borderRadius: borderRadius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: components.button.height,
+  },
+  disabledButton: {
+    backgroundColor: colors.gray,
+    opacity: 0.6,
+  },
+  saveButtonIcon: {
+    fontSize: 18,
+    marginRight: spacing.sm,
+  },
+  saveButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
   },
   cancelButton: {
     borderRadius: borderRadius.lg,
@@ -524,6 +691,13 @@ const styles = StyleSheet.create({
   buttonContent: {
     height: components.button.height,
     paddingHorizontal: spacing.lg,
+  },
+  currencyIcon: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
 });
 

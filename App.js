@@ -1,21 +1,19 @@
 import React, { useEffect } from 'react';
 import { AppRegistry, Platform } from 'react-native';
-import { Provider as PaperProvider, MD3LightTheme, configureFonts } from 'react-native-paper';
+import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { Provider as ReduxProvider } from 'react-redux';
 import { StatusBar } from 'expo-status-bar';
 import { store } from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
-import { applyIOSFormFixes } from './src/components/IOSFormFix';
 
-// React Native Paper automatically uses @expo/vector-icons MaterialCommunityIcons in Expo projects
+// Configure React Native Paper theme without MaterialCommunityIcons
 const theme = {
   ...MD3LightTheme,
 };
 
 function App() {
   useEffect(() => {
-    // Apply iOS form fixes on app start
-    applyIOSFormFixes();
+    console.log('DentalFlow app started');
   }, []);
 
   return (
@@ -28,7 +26,7 @@ function App() {
   );
 }
 
-// Register the app component
+// Register immediately after component definition
 AppRegistry.registerComponent('main', () => App);
 
 export default App;

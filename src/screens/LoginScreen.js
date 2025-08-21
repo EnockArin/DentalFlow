@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Animated } from 'react-native';
-import { TextInput, Button, Card, Title, Paragraph } from 'react-native-paper';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Animated, Text } from 'react-native';
+import { Button, Card, Title, Paragraph, TextInput } from 'react-native-paper';
+import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import GradientBackground from '../components/common/GradientBackground';
 import { colors, spacing, typography, borderRadius, shadows, components } from '../constants/theme';
+import { globalFormStyles } from '../styles/globalFormFixes';
+import { containerPreventionProps } from '../components/IOSFormFix';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
   
@@ -74,6 +78,40 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      Alert.alert('Email Required', 'Please enter your email address first');
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      Alert.alert(
+        'Reset Email Sent',
+        'A password reset email has been sent to your email address. Please check your inbox.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      let errorMessage = 'Failed to send reset email. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email address.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many requests. Please try again later.';
+          break;
+        default:
+          errorMessage = error.message;
+      }
+      
+      Alert.alert('Reset Error', errorMessage);
+    }
+  };
+
   return (
     <GradientBackground colors={[colors.primary, colors.primaryDark]}>
       <KeyboardAvoidingView 
@@ -91,9 +129,6 @@ const LoginScreen = ({ navigation }) => {
         >
           {/* Logo Section */}
           <View style={styles.logoSection}>
-            <View style={styles.logoContainer}>
-              <Title style={styles.logoEmoji}>🦷</Title>
-            </View>
             <Title style={styles.title}>DentalFlow</Title>
             <Paragraph style={styles.subtitle}>
               Professional Inventory Management
@@ -108,41 +143,47 @@ const LoginScreen = ({ navigation }) => {
                 Sign in to access your inventory
               </Paragraph>
               
-              <View style={styles.inputContainer}>
-                <TextInput
+              <View style={[styles.inputContainer, globalFormStyles.formContainer]} {...containerPreventionProps}>
+                <CustomTextInput
                   label="Email Address"
                   value={email}
                   onChangeText={setEmail}
                   mode="outlined"
-                  style={styles.input}
+                  style={[styles.input, globalFormStyles.hideValidationIndicators]}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  autoComplete="new-password"
-                  textContentType="oneTimeCode"
+                  autoComplete="off"
+                  textContentType="none"
                   autoCorrect={false}
                   spellCheck={false}
                   outlineColor={colors.borderLight}
                   activeOutlineColor={colors.primary}
-                  left={<TextInput.Icon icon="email" />}
-                  right={null}
                 />
                 
-                <TextInput
-                  label="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  mode="outlined"
-                  secureTextEntry
-                  style={styles.input}
-                  autoComplete="new-password"
-                  textContentType="oneTimeCode"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  outlineColor={colors.borderLight}
-                  activeOutlineColor={colors.primary}
-                  left={<TextInput.Icon icon="lock" />}
-                  right={null}
-                />
+                <View style={styles.inputWithIcon}>
+                  <CustomTextInput
+                    label="Password"
+                    value={password}
+                    onChangeText={setPassword}
+                    mode="outlined"
+                    secureTextEntry={!showPassword}
+                    style={[styles.input, styles.inputWithRightIcon, globalFormStyles.hideValidationIndicators]}
+                    autoComplete="off"
+                    textContentType="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    outlineColor={colors.borderLight}
+                    activeOutlineColor={colors.primary}
+                  />
+                  <View style={styles.inputIconRight}>
+                    <Text 
+                      style={styles.passwordToggleText}
+                      onPress={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </Text>
+                  </View>
+                </View>
               </View>
 
               {error && (
@@ -159,9 +200,19 @@ const LoginScreen = ({ navigation }) => {
                 style={styles.button}
                 contentStyle={styles.buttonContent}
                 buttonColor={colors.primary}
-                icon="login"
               >
                 {loading ? 'Signing In...' : 'Sign In'}
+              </Button>
+
+              {/* Forgot Password */}
+              <Button
+                mode="text"
+                onPress={handleForgotPassword}
+                textColor={colors.textSecondary}
+                style={styles.forgotPasswordButton}
+                disabled={loading}
+              >
+                Forgot Password?
               </Button>
 
               {/* Register Prompt */}
@@ -184,7 +235,7 @@ const LoginScreen = ({ navigation }) => {
           {/* Footer */}
           <View style={styles.footer}>
             <Paragraph style={styles.footerText}>
-              Secure • Professional • Reliable
+              Secure • Fast
             </Paragraph>
           </View>
         </Animated.View>
@@ -266,9 +317,51 @@ const styles = StyleSheet.create({
   inputContainer: {
     marginBottom: spacing.lg,
   },
+  inputWithIcon: {
+    position: 'relative',
+    marginBottom: spacing.md,
+  },
+  inputIconLeft: {
+    position: 'absolute',
+    left: 12,
+    top: '50%',
+    transform: [{ translateY: -12 }],
+    zIndex: 2,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 2,
+  },
+  iconText: {
+    fontSize: 20,
+    textAlign: 'center',
+  },
   input: {
     marginBottom: spacing.md,
     backgroundColor: colors.surface,
+  },
+  inputWithLeftIcon: {
+    paddingLeft: 50,
+  },
+  inputWithRightIcon: {
+    paddingRight: 50,
+  },
+  inputIconRight: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -12 }],
+    zIndex: 2,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 2,
+  },
+  passwordToggleText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
   },
   button: {
     marginTop: spacing.md,
@@ -278,6 +371,10 @@ const styles = StyleSheet.create({
   buttonContent: {
     height: components.button.height,
     paddingHorizontal: spacing.lg,
+  },
+  forgotPasswordButton: {
+    marginTop: spacing.sm,
+    alignSelf: 'center',
   },
   errorContainer: {
     marginTop: spacing.md,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Animated } from 'react-native';
-import { Card, Title, Paragraph, Button, Divider, IconButton, Avatar } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Animated, Text, TouchableOpacity } from 'react-native';
+import { Card, Title, Paragraph, Button, Divider } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
 import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -11,6 +11,7 @@ const DashboardScreen = ({ navigation }) => {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const { lowStockItems, items } = useSelector((state) => state.inventory);
+  const { locations } = useSelector((state) => state.locations);
   
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
@@ -47,38 +48,71 @@ const DashboardScreen = ({ navigation }) => {
     return daysUntilExpiry <= 30 && daysUntilExpiry > 0;
   });
 
+  // Location-specific analytics
+  const getLocationStats = (locationId) => {
+    const locationItems = items.filter(item => item.locationId === locationId);
+    const lowStockItems = locationItems.filter(item => item.currentQuantity <= item.minStockLevel);
+    return {
+      totalItems: locationItems.length,
+      lowStockCount: lowStockItems.length,
+      lowStockItems,
+    };
+  };
+
+  const getLocationName = (locationId) => {
+    const location = locations.find(loc => loc.id === locationId);
+    return location ? location.name : 'Unknown Location';
+  };
+
+  // Get locations with low stock alerts
+  const locationsWithLowStock = locations
+    .map(location => ({
+      ...location,
+      stats: getLocationStats(location.id)
+    }))
+    .filter(location => location.stats.lowStockCount > 0);
+
   const quickActions = [
     {
-      title: 'Scan Barcode',
-      icon: 'barcode-scan',
-      action: () => navigation.navigate('Scanner'),
+      title: 'Treatment Kits',
+      action: () => navigation.navigate('TreatmentKits'),
       mode: 'contained',
       color: colors.primary,
+      icon: '🏥',
+    },
+    {
+      title: 'Locations',
+      action: () => navigation.navigate('Locations'),
+      mode: 'contained',
+      color: colors.secondary,
+      icon: '🏢',
+    },
+    {
+      title: 'Scan Barcode',
+      action: () => navigation.navigate('Scanner'),
+      mode: 'contained',
+      color: colors.info,
     },
     {
       title: 'Manual Add Item',
-      icon: 'plus-circle',
       action: () => navigation.navigate('ItemDetail'),
       mode: 'contained',
       color: colors.success,
     },
     {
       title: 'Manual Checkout',
-      icon: 'cart-remove',
-      action: () => navigation.navigate('Inventory', { showCheckoutMode: true }),
+      action: () => navigation.navigate('Checkout'),
       mode: 'contained',
       color: colors.danger,
     },
     {
       title: 'View Inventory',
-      icon: 'package-variant',
       action: () => navigation.navigate('Inventory'),
       mode: 'outlined',
       color: colors.primary,
     },
     {
       title: `Shopping List (${lowStockItems.length})`,
-      icon: 'cart',
       action: () => navigation.navigate('ShoppingList'),
       mode: 'outlined',
       color: colors.secondary,
@@ -92,24 +126,14 @@ const DashboardScreen = ({ navigation }) => {
         {/* Header Section */}
         <View style={styles.header}>
           <View style={styles.headerContent}>
-            <Avatar.Icon 
-              size={56} 
-              icon="account" 
-              style={styles.avatar}
-              color={colors.white}
-            />
             <View style={styles.userInfo}>
               <Title style={styles.welcomeTitle}>Welcome back! 👋</Title>
               <Paragraph style={styles.userEmail}>{user?.email}</Paragraph>
             </View>
           </View>
-          <IconButton
-            icon="cog"
-            size={24}
-            iconColor={colors.textSecondary}
-            onPress={() => navigation.navigate('Settings')}
-            style={styles.settingsButton}
-          />
+          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.settingsButton}>
+            <Text style={styles.headerIcon}>⚙️</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Cards */}
@@ -117,12 +141,7 @@ const DashboardScreen = ({ navigation }) => {
           <Card style={[styles.statCard, styles.totalItemsCard]}>
             <Card.Content style={styles.statContent}>
               <View style={styles.statIconContainer}>
-                <IconButton
-                  icon="package-variant"
-                  size={32}
-                  iconColor={colors.primary}
-                  style={styles.statIcon}
-                />
+                <Text style={styles.statIcon}>📦</Text>
               </View>
               <Title style={[styles.statNumber, { color: colors.primary }]}>
                 {items.length}
@@ -134,12 +153,7 @@ const DashboardScreen = ({ navigation }) => {
           <Card style={[styles.statCard, styles.lowStockCard]}>
             <Card.Content style={styles.statContent}>
               <View style={styles.statIconContainer}>
-                <IconButton
-                  icon="alert"
-                  size={32}
-                  iconColor={colors.warning}
-                  style={styles.statIcon}
-                />
+                <Text style={styles.statIcon}>⚠️</Text>
               </View>
               <Title style={[styles.statNumber, { color: colors.warning }]}>
                 {lowStockItems.length}
@@ -154,11 +168,7 @@ const DashboardScreen = ({ navigation }) => {
           <Card.Content style={styles.actionContent}>
             <View style={styles.actionHeader}>
               <Title style={styles.actionTitle}>Quick Actions</Title>
-              <IconButton
-                icon="lightning-bolt"
-                size={20}
-                iconColor={colors.accent}
-              />
+              <Text style={styles.quickActionIcon}>⚡</Text>
             </View>
             
             <View style={styles.actionGrid}>
@@ -173,7 +183,6 @@ const DashboardScreen = ({ navigation }) => {
                   ]}
                   buttonColor={action.mode === 'contained' ? action.color : undefined}
                   textColor={action.mode === 'contained' ? colors.white : action.color}
-                  icon={action.icon}
                   contentStyle={styles.actionButtonContent}
                 >
                   {action.title}
@@ -188,12 +197,7 @@ const DashboardScreen = ({ navigation }) => {
           <Card style={styles.alertCard}>
             <Card.Content style={styles.alertContent}>
               <View style={styles.alertHeader}>
-                <IconButton
-                  icon="clock-alert"
-                  size={24}
-                  iconColor={colors.warning}
-                  style={styles.alertIcon}
-                />
+                <Text style={styles.alertIcon}>🕐</Text>
                 <View style={styles.alertText}>
                   <Title style={styles.alertTitle}>Expiring Soon</Title>
                   <Paragraph style={styles.alertDescription}>
@@ -213,13 +217,61 @@ const DashboardScreen = ({ navigation }) => {
           </Card>
         )}
 
+        {/* Location-Specific Low Stock Alerts */}
+        {locationsWithLowStock.length > 0 && (
+          <Card style={styles.locationAlertsCard}>
+            <Card.Content style={styles.locationAlertsContent}>
+              <View style={styles.locationAlertsHeader}>
+                <Text style={styles.locationAlertsIcon}>📍</Text>
+                <View style={styles.locationAlertsText}>
+                  <Title style={styles.locationAlertsTitle}>Low Stock by Location</Title>
+                  <Paragraph style={styles.locationAlertsDescription}>
+                    {locationsWithLowStock.length} locations have low stock items
+                  </Paragraph>
+                </View>
+              </View>
+              
+              <View style={styles.locationAlertsList}>
+                {locationsWithLowStock.map((location) => (
+                  <TouchableOpacity
+                    key={location.id}
+                    style={styles.locationAlertItem}
+                    onPress={() => navigation.navigate('Inventory', { locationId: location.id, filter: 'lowStock' })}
+                  >
+                    <View style={styles.locationAlertInfo}>
+                      <Text style={styles.locationAlertName}>{location.name}</Text>
+                      <Text style={styles.locationAlertType}>{location.type}</Text>
+                      <Text style={styles.locationAlertCount}>
+                        {location.stats.lowStockCount} low stock items
+                      </Text>
+                    </View>
+                    <View style={styles.locationAlertBadge}>
+                      <Text style={styles.locationAlertBadgeText}>
+                        {location.stats.lowStockCount}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Button
+                mode="text"
+                onPress={() => navigation.navigate('Locations')}
+                textColor={colors.danger}
+                style={styles.alertButton}
+              >
+                Manage Locations
+              </Button>
+            </Card.Content>
+          </Card>
+        )}
+
         {/* Logout Button */}
         <Button
           mode="outlined"
           onPress={handleLogout}
           style={styles.logoutButton}
           textColor={colors.danger}
-          icon="logout"
           contentStyle={styles.logoutButtonContent}
         >
           Logout
@@ -246,10 +298,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-  avatar: {
-    backgroundColor: colors.primary,
-    marginRight: spacing.md,
   },
   userInfo: {
     flex: 1,
@@ -388,6 +436,106 @@ const styles = StyleSheet.create({
   logoutButtonContent: {
     height: components.button.height,
     paddingHorizontal: spacing.lg,
+  },
+  // Emoji icon styles
+  headerIcon: {
+    fontSize: 20,
+    textAlign: 'center',
+  },
+  statIcon: {
+    fontSize: 24,
+    textAlign: 'center',
+  },
+  quickActionIcon: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  alertIcon: {
+    fontSize: 20,
+    textAlign: 'center',
+  },
+  // Location Alerts Styles
+  locationAlertsCard: {
+    marginBottom: spacing.xl,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.dangerLight + '15',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.danger,
+    ...shadows.small,
+  },
+  locationAlertsContent: {
+    padding: spacing.lg,
+  },
+  locationAlertsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  locationAlertsIcon: {
+    fontSize: 20,
+    textAlign: 'center',
+    marginRight: spacing.sm,
+  },
+  locationAlertsText: {
+    flex: 1,
+  },
+  locationAlertsTitle: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.danger,
+    marginBottom: spacing.xs,
+  },
+  locationAlertsDescription: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+  },
+  locationAlertsList: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  locationAlertItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  locationAlertInfo: {
+    flex: 1,
+  },
+  locationAlertName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  locationAlertType: {
+    fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    textTransform: 'capitalize',
+    marginBottom: spacing.xs,
+  },
+  locationAlertCount: {
+    fontSize: typography.fontSize.xs,
+    color: colors.danger,
+    fontWeight: typography.fontWeight.medium,
+  },
+  locationAlertBadge: {
+    backgroundColor: colors.danger,
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.sm,
+  },
+  locationAlertBadgeText: {
+    fontSize: 11,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.white,
   },
 });
 

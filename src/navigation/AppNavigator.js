@@ -15,8 +15,13 @@ import DashboardScreen from '../screens/DashboardScreen';
 import InventoryListScreen from '../screens/InventoryListScreen';
 import ItemDetailScreen from '../screens/ItemDetailScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
+import CheckoutScreen from '../screens/CheckoutScreen';
 import ShoppingListScreen from '../screens/ShoppingListScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import TreatmentKitsScreen from '../screens/TreatmentKitsScreen';
+import TreatmentKitDetailScreen from '../screens/TreatmentKitDetailScreen';
+import LocationsScreen from '../screens/LocationsScreen';
+import StockTransferScreen from '../screens/StockTransferScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -130,6 +135,11 @@ const AppNavigator = () => {
               }}
             />
             <Stack.Screen 
+              name="Checkout" 
+              component={CheckoutScreen}
+              options={{ title: 'Manual Checkout' }}
+            />
+            <Stack.Screen 
               name="ShoppingList" 
               component={ShoppingListScreen}
               options={{ title: 'Shopping List' }}
@@ -138,6 +148,28 @@ const AppNavigator = () => {
               name="Settings" 
               component={SettingsScreen}
               options={{ title: 'Settings' }}
+            />
+            <Stack.Screen 
+              name="TreatmentKits" 
+              component={TreatmentKitsScreen}
+              options={{ title: 'Treatment Kits' }}
+            />
+            <Stack.Screen 
+              name="TreatmentKitDetail" 
+              component={TreatmentKitDetailScreen}
+              options={({ route }) => ({
+                title: route.params?.kitId ? 'Edit Kit' : 'New Treatment Kit'
+              })}
+            />
+            <Stack.Screen 
+              name="Locations" 
+              component={LocationsScreen}
+              options={{ title: 'Locations' }}
+            />
+            <Stack.Screen 
+              name="StockTransfer" 
+              component={StockTransferScreen}
+              options={{ title: 'Stock Transfer' }}
             />
           </>
         )}

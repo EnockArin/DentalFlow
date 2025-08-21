@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Animated, ScrollView } from 'react-native';
-import { TextInput, Button, Card, Title, Paragraph, HelperText } from 'react-native-paper';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Animated, ScrollView, Text } from 'react-native';
+import { Button, Card, Title, Paragraph, HelperText, TextInput } from 'react-native-paper';
+import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import GradientBackground from '../components/common/GradientBackground';
 import { colors, spacing, typography, borderRadius, shadows, components } from '../constants/theme';
+import { globalFormStyles } from '../styles/globalFormFixes';
 
 const RegisterScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
@@ -17,6 +19,8 @@ const RegisterScreen = ({ navigation }) => {
     confirmPassword: '',
   });
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
   
@@ -175,24 +179,23 @@ const RegisterScreen = ({ navigation }) => {
                   Get started with your dental inventory management
                 </Paragraph>
                 
-                <View style={styles.inputContainer}>
+                <View style={[styles.inputContainer, globalFormStyles.formContainer]}>
                   {/* Name Fields Row */}
                   <View style={styles.nameRow}>
                     <View style={styles.nameField}>
-                      <TextInput
+                      <CustomTextInput
                         label="First Name"
                         value={formData.firstName}
                         onChangeText={(text) => updateFormData('firstName', text)}
                         mode="outlined"
-                        style={styles.input}
+                        style={[styles.input, globalFormStyles.hideValidationIndicators]}
                         autoCapitalize="words"
-                        autoComplete="new-password"
-                        textContentType="oneTimeCode"
+                        autoComplete="off"
+                        textContentType="none"
                         autoCorrect={false}
                         spellCheck={false}
                         outlineColor={colors.borderLight}
                         activeOutlineColor={colors.primary}
-                        left={<TextInput.Icon icon="account" />}
                         error={!!errors.firstName}
                         right={null}
                       />
@@ -202,15 +205,15 @@ const RegisterScreen = ({ navigation }) => {
                     </View>
                     
                     <View style={styles.nameField}>
-                      <TextInput
+                      <CustomTextInput
                         label="Last Name"
                         value={formData.lastName}
                         onChangeText={(text) => updateFormData('lastName', text)}
                         mode="outlined"
-                        style={styles.input}
+                        style={[styles.input, globalFormStyles.hideValidationIndicators]}
                         autoCapitalize="words"
-                        autoComplete="new-password"
-                        textContentType="oneTimeCode"
+                        autoComplete="off"
+                        textContentType="none"
                         autoCorrect={false}
                         spellCheck={false}
                         outlineColor={colors.borderLight}
@@ -225,12 +228,12 @@ const RegisterScreen = ({ navigation }) => {
                   </View>
 
                   {/* Email Field */}
-                  <TextInput
+                  <CustomTextInput
                     label="Email Address"
                     value={formData.email}
                     onChangeText={(text) => updateFormData('email', text)}
                     mode="outlined"
-                    style={styles.input}
+                    style={[styles.input, globalFormStyles.hideValidationIndicators]}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoComplete="off"
@@ -239,7 +242,6 @@ const RegisterScreen = ({ navigation }) => {
                     spellCheck={false}
                     outlineColor={colors.borderLight}
                     activeOutlineColor={colors.primary}
-                    left={<TextInput.Icon icon="email" />}
                     error={!!errors.email}
                     right={null}
                   />
@@ -248,45 +250,63 @@ const RegisterScreen = ({ navigation }) => {
                   </HelperText>
                   
                   {/* Password Field */}
-                  <TextInput
-                    label="Password"
-                    value={formData.password}
-                    onChangeText={(text) => updateFormData('password', text)}
-                    mode="outlined"
-                    secureTextEntry
-                    style={styles.input}
-                    autoComplete="off"
-                    textContentType="none"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    outlineColor={colors.borderLight}
-                    activeOutlineColor={colors.primary}
-                    left={<TextInput.Icon icon="lock" />}
-                    error={!!errors.password}
-                    right={null}
-                  />
+                  <View style={styles.inputWithIcon}>
+                    <CustomTextInput
+                      label="Password"
+                      value={formData.password}
+                      onChangeText={(text) => updateFormData('password', text)}
+                      mode="outlined"
+                      secureTextEntry={!showPassword}
+                      style={[styles.input, styles.inputWithRightIcon, globalFormStyles.hideValidationIndicators]}
+                      autoComplete="off"
+                      textContentType="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      outlineColor={colors.borderLight}
+                      activeOutlineColor={colors.primary}
+                      error={!!errors.password}
+                      right={null}
+                    />
+                    <View style={styles.inputIconRight}>
+                      <Text 
+                        style={styles.passwordToggleText}
+                        onPress={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? 'Hide' : 'Show'}
+                      </Text>
+                    </View>
+                  </View>
                   <HelperText type="error" visible={!!errors.password} style={styles.helperText}>
                     {errors.password}
                   </HelperText>
 
                   {/* Confirm Password Field */}
-                  <TextInput
-                    label="Confirm Password"
-                    value={formData.confirmPassword}
-                    onChangeText={(text) => updateFormData('confirmPassword', text)}
-                    mode="outlined"
-                    secureTextEntry
-                    style={styles.input}
-                    autoComplete="off"
-                    textContentType="none"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    outlineColor={colors.borderLight}
-                    activeOutlineColor={colors.primary}
-                    left={<TextInput.Icon icon="lock-check" />}
-                    error={!!errors.confirmPassword}
-                    right={null}
-                  />
+                  <View style={styles.inputWithIcon}>
+                    <CustomTextInput
+                      label="Confirm Password"
+                      value={formData.confirmPassword}
+                      onChangeText={(text) => updateFormData('confirmPassword', text)}
+                      mode="outlined"
+                      secureTextEntry={!showConfirmPassword}
+                      style={[styles.input, styles.inputWithRightIcon, globalFormStyles.hideValidationIndicators]}
+                      autoComplete="off"
+                      textContentType="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      outlineColor={colors.borderLight}
+                      activeOutlineColor={colors.primary}
+                      error={!!errors.confirmPassword}
+                      right={null}
+                    />
+                    <View style={styles.inputIconRight}>
+                      <Text 
+                        style={styles.passwordToggleText}
+                        onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? 'Hide' : 'Show'}
+                      </Text>
+                    </View>
+                  </View>
                   <HelperText type="error" visible={!!errors.confirmPassword} style={styles.helperText}>
                     {errors.confirmPassword}
                   </HelperText>
@@ -300,7 +320,6 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.button}
                   contentStyle={styles.buttonContent}
                   buttonColor={colors.primary}
-                  icon="account-plus"
                 >
                   {loading ? 'Creating Account...' : 'Create Account'}
                 </Button>
@@ -419,6 +438,30 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: spacing.xs,
     backgroundColor: colors.surface,
+  },
+  inputWithIcon: {
+    position: 'relative',
+  },
+  inputWithRightIcon: {
+    paddingRight: 50,
+  },
+  inputIconRight: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -12 }],
+    zIndex: 2,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 2,
+  },
+  passwordToggleText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
   },
   helperText: {
     marginBottom: spacing.sm,

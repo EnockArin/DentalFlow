@@ -176,12 +176,12 @@ const SettingsScreen = ({ navigation }) => {
           <List.Item
             title="Email"
             description={user?.email || 'Not available'}
-            left={(props) => <List.Icon {...props} icon="email" />}
+            left={(props) => <List.Icon {...props}  />}
           />
           <List.Item
             title="User ID"
             description={user?.uid || 'Not available'}
-            left={(props) => <List.Icon {...props} icon="account" />}
+            left={(props) => <List.Icon {...props}  />}
           />
         </Card.Content>
       </Card>
@@ -198,7 +198,7 @@ const SettingsScreen = ({ navigation }) => {
             loading={exporting}
             disabled={exporting}
             style={styles.exportButton}
-            icon="download"
+            
           >
             Export Full Inventory ({items.length} items)
           </Button>
@@ -209,7 +209,7 @@ const SettingsScreen = ({ navigation }) => {
             loading={exporting}
             disabled={exporting}
             style={styles.exportButton}
-            icon="history"
+            
           >
             Export Stock Movement Log
           </Button>
@@ -220,7 +220,7 @@ const SettingsScreen = ({ navigation }) => {
             loading={exporting}
             disabled={exporting}
             style={styles.exportButton}
-            icon="cart"
+            
           >
             Export Shopping List ({items.filter(item => item.currentQuantity <= item.minStockLevel).length} items)
           </Button>
@@ -244,7 +244,7 @@ const SettingsScreen = ({ navigation }) => {
             mode="outlined"
             onPress={() => navigation.navigate('Dashboard')}
             style={styles.navButton}
-            icon="view-dashboard"
+            
           >
             Dashboard
           </Button>
@@ -253,7 +253,7 @@ const SettingsScreen = ({ navigation }) => {
             mode="outlined"
             onPress={() => navigation.navigate('Inventory')}
             style={styles.navButton}
-            icon="package-variant"
+            
           >
             View Inventory
           </Button>
@@ -262,7 +262,7 @@ const SettingsScreen = ({ navigation }) => {
             mode="outlined"
             onPress={() => navigation.navigate('ShoppingList')}
             style={styles.navButton}
-            icon="cart"
+            
           >
             Shopping List
           </Button>
@@ -277,7 +277,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={handleLogout}
             style={styles.logoutButton}
             buttonColor="#f44336"
-            icon="logout"
+            
           >
             Logout
           </Button>

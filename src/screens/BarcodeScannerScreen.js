@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, Modal, Animated, Dimensions, StatusBar, Platform } from 'react-native';
-import { Button, Card, TextInput, Title, Paragraph, IconButton, Surface, Chip } from 'react-native-paper';
+import { View, Text, StyleSheet, Alert, Modal, Animated, Dimensions, StatusBar, Platform, TouchableOpacity } from 'react-native';
+import { Button, Card, Title, Paragraph, Surface, Chip, TextInput } from 'react-native-paper';
+import CustomTextInput from '../components/common/CustomTextInput';
 
 // Conditionally import BarCodeScanner to handle simulator environments
 let BarCodeScanner;
@@ -13,6 +14,7 @@ import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } 
 import { db } from '../config/firebase';
 import { useSelector } from 'react-redux';
 import { colors, spacing, borderRadius, typography, shadows } from '../constants/theme';
+import { globalFormStyles } from '../styles/globalFormFixes';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const SCAN_AREA_SIZE = screenWidth * 0.7;
@@ -61,15 +63,31 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     const getBarCodeScannerPermissions = async () => {
       // Check if we're in a simulator or if BarCodeScanner is available
       if (!BarCodeScanner || Platform.OS === 'web') {
+        console.log('BarCodeScanner not available - simulator or web');
         setHasPermission(false);
         return;
       }
       
       try {
+        // First check current permission status
+        const { status: currentStatus } = await BarCodeScanner.getPermissionsAsync();
+        console.log('Current camera permission status:', currentStatus);
+        
+        if (currentStatus === 'granted') {
+          setHasPermission(true);
+          return;
+        }
+        
+        // If not granted, request permission
         const { status } = await BarCodeScanner.requestPermissionsAsync();
+        console.log('Requested camera permission status:', status);
         setHasPermission(status === 'granted');
+        
+        if (status !== 'granted') {
+          console.log('Camera permission denied by user');
+        }
       } catch (error) {
-        console.warn('Camera permissions not available:', error);
+        console.error('Error with camera permissions:', error);
         setHasPermission(false);
       }
     };
@@ -78,7 +96,16 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
   }, []);
 
   const handleBarCodeScanned = async ({ type, data }) => {
+    console.log('Barcode scanned:', { type, data });
     setScanned(true);
+    
+    // Add visual/haptic feedback
+    try {
+      const { Haptics } = require('expo-haptics');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (error) {
+      console.log('Haptics not available:', error);
+    }
     
     try {
       // Query Firestore for item with this barcode
@@ -89,10 +116,12 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
         // Item exists - show check in/out modal
         const itemDoc = querySnapshot.docs[0];
         const itemData = { id: itemDoc.id, ...itemDoc.data() };
+        console.log('Found item for barcode:', itemData.productName);
         setScannedItem(itemData);
         setModalVisible(true);
       } else {
         // Item not found - navigate to add new item with barcode prefilled
+        console.log('No item found for barcode:', data);
         Alert.alert(
           'Item Not Found',
           `No item found with barcode: ${data}\n\nWould you like to add a new item?`,
@@ -188,10 +217,10 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
   if (hasPermission === null) {
     return (
       <View style={styles.permissionContainer}>
-        <IconButton
-          icon="camera"
+        <TouchableOpacity
+          
           size={64}
-          iconColor={colors.primary}
+          
           style={styles.permissionIcon}
         />
         <Title style={styles.permissionTitle}>Camera Permission</Title>
@@ -207,10 +236,10 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     
     return (
       <View style={styles.permissionContainer}>
-        <IconButton
+        <TouchableOpacity
           icon={isSimulator ? "cellphone-off" : "camera-off"}
           size={64}
-          iconColor={colors.warning}
+          
           style={styles.permissionIcon}
         />
         <Title style={styles.permissionTitle}>
@@ -240,15 +269,52 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
           </View>
         )}
         
-        <Button 
-          mode="contained" 
-          onPress={() => navigation.goBack()}
-          style={styles.permissionButton}
-          buttonColor={colors.primary}
-          icon="arrow-left"
-        >
-          Back to Dashboard
-        </Button>
+        <View style={styles.permissionActions}>
+          <Button 
+            mode="contained" 
+            onPress={() => navigation.goBack()}
+            style={styles.permissionButton}
+            buttonColor={colors.primary}
+          >
+            Back to Dashboard
+          </Button>
+          
+          {!isSimulator && (
+            <Button 
+              mode="outlined" 
+              onPress={() => {
+                Alert.alert(
+                  'Camera Permission Required',
+                  'To enable barcode scanning:\n\n1. Go to your device Settings\n2. Find DentalFlow in Apps\n3. Enable Camera permission\n4. Return to this screen',
+                  [
+                    { text: 'OK' },
+                    { 
+                      text: 'Retry Permission', 
+                      onPress: () => {
+                        setHasPermission(null);
+                        // Re-trigger permission check
+                        const getBarCodeScannerPermissions = async () => {
+                          try {
+                            const { status } = await BarCodeScanner.requestPermissionsAsync();
+                            setHasPermission(status === 'granted');
+                          } catch (error) {
+                            console.error('Error requesting permission:', error);
+                            setHasPermission(false);
+                          }
+                        };
+                        getBarCodeScannerPermissions();
+                      }
+                    }
+                  ]
+                );
+              }}
+              style={[styles.permissionButton, { marginTop: spacing.md }]}
+              textColor={colors.primary}
+            >
+              Enable Camera Access
+            </Button>
+          )}
+        </View>
       </View>
     );
   }
@@ -268,10 +334,10 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
         <View style={styles.header}>
           <Surface style={styles.headerSurface}>
             <View style={styles.headerContent}>
-              <IconButton
-                icon="arrow-left"
+              <TouchableOpacity
+                
                 size={24}
-                iconColor={colors.white}
+                
                 onPress={() => navigation.goBack()}
                 style={styles.backButton}
               />
@@ -322,10 +388,10 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
         <View style={styles.bottomContainer}>
           <Surface style={styles.instructionSurface}>
             <View style={styles.instructionContent}>
-              <IconButton
-                icon="barcode"
+              <TouchableOpacity
+                
                 size={32}
-                iconColor={colors.primary}
+                
                 style={styles.instructionIcon}
               />
               <Title style={styles.instructionTitle}>
@@ -344,7 +410,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
                   onPress={resetScanner}
                   style={styles.scanAgainButton}
                   buttonColor={colors.primary}
-                  icon="refresh"
+                  
                   compact
                 >
                   Scan Again
@@ -368,10 +434,10 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderContent}>
-                  <IconButton
-                    icon="check-circle"
+                  <TouchableOpacity
+                    
                     size={32}
-                    iconColor={colors.success}
+                    
                     style={styles.modalHeaderIcon}
                   />
                   <View style={styles.modalHeaderText}>
@@ -382,7 +448,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
                   </View>
                 </View>
                 <Chip 
-                  icon="barcode" 
+                   
                   style={styles.barcodeChip}
                   textStyle={styles.barcodeChipText}
                 >
@@ -398,7 +464,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
                 
                 <View style={styles.stockInfo}>
                   <View style={styles.stockItem}>
-                    <IconButton icon="package" size={20} iconColor={colors.primary} style={styles.stockIcon} />
+                    <TouchableOpacity  size={20}  style={styles.stockIcon} />
                     <Paragraph style={styles.stockLabel}>Current Stock</Paragraph>
                     <Title style={[styles.stockValue, { color: colors.primary }]}>
                       {scannedItem?.currentQuantity}
@@ -406,7 +472,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
                   </View>
                   <View style={styles.stockDivider} />
                   <View style={styles.stockItem}>
-                    <IconButton icon="alert" size={20} iconColor={colors.warning} style={styles.stockIcon} />
+                    <TouchableOpacity  size={20}  style={styles.stockIcon} />
                     <Paragraph style={styles.stockLabel}>Min Level</Paragraph>
                     <Title style={[styles.stockValue, { color: colors.warning }]}>
                       {scannedItem?.minStockLevel}
@@ -416,19 +482,19 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
               </View>
 
               {/* Quantity Input */}
-              <View style={styles.quantitySection}>
+              <View style={[styles.quantitySection, globalFormStyles.formContainer]}>
                 <Paragraph style={styles.quantityLabel}>Quantity</Paragraph>
-                <TextInput
+                <CustomTextInput
                   value={quantity}
                   onChangeText={setQuantity}
                   mode="outlined"
                   keyboardType="numeric"
-                  style={styles.quantityInput}
-                  left={<TextInput.Icon icon="counter" />}
+                  style={[styles.quantityInput, globalFormStyles.hideValidationIndicators]}
+                  left={<TextInput.Icon  />}
                   outlineColor={colors.borderLight}
                   activeOutlineColor={colors.primary}
-                  autoComplete="new-password"
-                  textContentType="oneTimeCode"
+                  autoComplete="off"
+                  textContentType="none"
                   autoCorrect={false}
                   spellCheck={false}
                   right={null}
@@ -444,7 +510,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
                   disabled={loading}
                   style={[styles.actionButton, styles.checkInButton]}
                   buttonColor={colors.success}
-                  icon="plus"
+                  
                 >
                   Add Stock
                 </Button>
@@ -456,7 +522,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
                   disabled={loading}
                   style={[styles.actionButton, styles.checkOutButton]}
                   buttonColor={colors.danger}
-                  icon="cart-remove"
+                  
                 >
                   Checkout
                 </Button>
@@ -508,6 +574,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     color: colors.textSecondary,
     lineHeight: typography.lineHeight.relaxed * typography.fontSize.md,
+  },
+  permissionActions: {
+    alignItems: 'center',
+    width: '100%',
   },
   permissionButton: {
     borderRadius: borderRadius.lg,

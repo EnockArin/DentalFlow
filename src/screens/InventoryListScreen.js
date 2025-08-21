@@ -10,23 +10,26 @@ import {
   Card,
   Title,
   Paragraph,
-  IconButton,
   Badge,
   Surface,
-  TextInput,
-  Button
+  Button,
+  TextInput
 } from 'react-native-paper';
+import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
 import { deleteDoc, doc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { colors, spacing, borderRadius, typography, shadows, statusColors } from '../constants/theme';
+import { globalFormStyles } from '../styles/globalFormFixes';
 
 const InventoryListScreen = ({ navigation, route }) => {
   const dispatch = useDispatch();
   const { items, loading } = useSelector((state) => state.inventory);
   const { user } = useSelector((state) => state.auth);
+  const { locations } = useSelector((state) => state.locations);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState(route.params?.filter || 'all');
+  const [selectedLocationId, setSelectedLocationId] = useState(route.params?.locationId || '');
   const showCheckoutMode = route.params?.showCheckoutMode || false;
   const [fadeAnim] = useState(new Animated.Value(0));
   
@@ -35,6 +38,9 @@ const InventoryListScreen = ({ navigation, route }) => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [adjustmentQuantity, setAdjustmentQuantity] = useState('1');
   const [adjustmentLoading, setAdjustmentLoading] = useState(false);
+  
+  // Checkout Options Modal State
+  const [checkoutOptionsVisible, setCheckoutOptionsVisible] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -144,11 +150,17 @@ const InventoryListScreen = ({ navigation, route }) => {
   };
 
   const getFilteredItems = () => {
-    let filteredItems = items.filter((item) =>
-      item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.barcode?.includes(searchQuery) ||
-      item.location?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    let filteredItems = items.filter((item) => {
+      // Text search filter
+      const matchesSearch = item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.barcode?.includes(searchQuery) ||
+        (item.locationName || item.location || '').toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Location filter
+      const matchesLocation = !selectedLocationId || item.locationId === selectedLocationId;
+      
+      return matchesSearch && matchesLocation;
+    });
 
     switch (filter) {
       case 'lowStock':
@@ -242,10 +254,10 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Header Row */}
               <View style={styles.itemHeader}>
                 <View style={styles.itemTitleSection}>
-                  <IconButton
+                  <TouchableOpacity
                     icon={status.icon}
                     size={24}
-                    iconColor={status.color}
+                    
                     style={styles.statusIcon}
                   />
                   <View style={styles.titleContainer}>
@@ -266,21 +278,21 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Info Row */}
               <View style={styles.itemInfo}>
                 <View style={styles.infoItem}>
-                  <IconButton icon="package" size={16} iconColor={colors.textSecondary} style={styles.infoIcon} />
+                  <TouchableOpacity  size={16}  style={styles.infoIcon} />
                   <Text style={styles.infoText}>
                     {item.currentQuantity}/{item.minStockLevel}
                   </Text>
                 </View>
                 
                 <View style={styles.infoItem}>
-                  <IconButton icon="map-marker" size={16} iconColor={colors.textSecondary} style={styles.infoIcon} />
+                  <TouchableOpacity  size={16}  style={styles.infoIcon} />
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {item.location || 'No location'}
+                    {item.locationName || item.location || 'No location'}
                   </Text>
                 </View>
                 
                 <View style={styles.infoItem}>
-                  <IconButton icon="calendar" size={16} iconColor={colors.textSecondary} style={styles.infoIcon} />
+                  <TouchableOpacity  size={16}  style={styles.infoIcon} />
                   <Text style={[styles.infoText, styles.expiryText]} numberOfLines={1}>
                     {formatExpiryDate(item.expiryDate)}
                   </Text>
@@ -297,10 +309,10 @@ const InventoryListScreen = ({ navigation, route }) => {
                 >
                   {status.label}
                 </Chip>
-                <IconButton
-                  icon="chevron-right"
+                <TouchableOpacity
+                  
                   size={20}
-                  iconColor={colors.textSecondary}
+                  
                   style={styles.chevronIcon}
                 />
               </View>
@@ -322,8 +334,13 @@ const InventoryListScreen = ({ navigation, route }) => {
 
   const filteredItems = getFilteredItems();
 
-  const lowStockCount = items.filter(item => item.currentQuantity <= item.minStockLevel).length;
-  const expiringCount = items.filter(item => {
+  // Count items for filter chips (considering location filter)
+  const locationFilteredItems = selectedLocationId 
+    ? items.filter(item => item.locationId === selectedLocationId)
+    : items;
+    
+  const lowStockCount = locationFilteredItems.filter(item => item.currentQuantity <= item.minStockLevel).length;
+  const expiringCount = locationFilteredItems.filter(item => {
     if (!item.expiryDate) return false;
     const daysUntilExpiry = Math.ceil(
       (item.expiryDate - new Date()) / (1000 * 60 * 60 * 24)
@@ -341,18 +358,49 @@ const InventoryListScreen = ({ navigation, route }) => {
           value={searchQuery}
           style={styles.searchbar}
           inputStyle={styles.searchInput}
-          icon="magnify"
-          clearIcon="close"
-          traileringIcon={() => (
-            <IconButton
-              icon="filter-variant"
-              size={20}
-              iconColor={colors.primary}
-              onPress={() => {/* TODO: Add filter modal */}}
-            />
-          )}
+          
         />
       </View>
+      
+      {/* Location Filter */}
+      {locations.length > 0 && (
+        <View style={styles.locationContainer}>
+          <Text style={styles.locationLabel}>Filter by Location:</Text>
+          <View style={styles.locationScroll}>
+            <TouchableOpacity
+              style={[
+                styles.locationChip,
+                !selectedLocationId && styles.selectedLocationChip
+              ]}
+              onPress={() => setSelectedLocationId('')}
+            >
+              <Text style={[
+                styles.locationChipText,
+                !selectedLocationId && styles.selectedLocationChipText
+              ]}>
+                All Locations
+              </Text>
+            </TouchableOpacity>
+            {locations.map((location) => (
+              <TouchableOpacity
+                key={location.id}
+                style={[
+                  styles.locationChip,
+                  selectedLocationId === location.id && styles.selectedLocationChip
+                ]}
+                onPress={() => setSelectedLocationId(location.id)}
+              >
+                <Text style={[
+                  styles.locationChipText,
+                  selectedLocationId === location.id && styles.selectedLocationChipText
+                ]}>
+                  {location.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
       
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
@@ -363,7 +411,7 @@ const InventoryListScreen = ({ navigation, route }) => {
           textStyle={filter === 'all' ? styles.selectedChipText : styles.chipText}
           mode={filter === 'all' ? 'flat' : 'outlined'}
         >
-          All ({items.length})
+          All ({locationFilteredItems.length})
         </Chip>
         <Chip
           selected={filter === 'lowStock'}
@@ -388,10 +436,10 @@ const InventoryListScreen = ({ navigation, route }) => {
       {/* Content */}
       {filteredItems.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <IconButton
+          <TouchableOpacity
             icon={searchQuery ? 'magnify-close' : 'package-variant-closed'}
             size={64}
-            iconColor={colors.textLight}
+            
             style={styles.emptyIcon}
           />
           <Title style={styles.emptyTitle}>
@@ -417,19 +465,23 @@ const InventoryListScreen = ({ navigation, route }) => {
       )}
 
       {/* Floating Action Buttons */}
-      <FAB
+      <TouchableOpacity
         style={[styles.fabAdd, { backgroundColor: colors.primary }]}
-        icon="plus"
         onPress={() => navigation.navigate('ItemDetail')}
-        color={colors.white}
-      />
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+        <Text style={styles.fabLabel}>Add Item</Text>
+      </TouchableOpacity>
       
-      <FAB
-        style={[styles.fabScan, { backgroundColor: colors.secondary }]}
-        icon="barcode-scan"
-        onPress={() => navigation.navigate('Scanner')}
-        color={colors.white}
-      />
+      <TouchableOpacity
+        style={[styles.fabScan, { backgroundColor: colors.danger }]}
+        onPress={() => setCheckoutOptionsVisible(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabIcon}>📦</Text>
+        <Text style={styles.fabLabel}>Checkout</Text>
+      </TouchableOpacity>
 
       {/* Quick Actions Modal */}
       <Modal
@@ -444,10 +496,10 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderContent}>
-                  <IconButton
-                    icon="package"
+                  <TouchableOpacity
+                    
                     size={32}
-                    iconColor={colors.primary}
+                    
                     style={styles.modalHeaderIcon}
                   />
                   <View style={styles.modalHeaderText}>
@@ -468,19 +520,19 @@ const InventoryListScreen = ({ navigation, route }) => {
               </View>
 
               {/* Quantity Input */}
-              <View style={styles.quantitySection}>
+              <View style={[styles.quantitySection, globalFormStyles.formContainer]}>
                 <Paragraph style={styles.quantityLabel}>Adjustment Quantity</Paragraph>
-                <TextInput
+                <CustomTextInput
                   value={adjustmentQuantity}
                   onChangeText={setAdjustmentQuantity}
                   mode="outlined"
                   keyboardType="numeric"
-                  style={styles.quantityInput}
-                  left={<TextInput.Icon icon="counter" />}
+                  style={[styles.quantityInput, globalFormStyles.hideValidationIndicators]}
+                  left={<TextInput.Icon  />}
                   outlineColor={colors.borderLight}
                   activeOutlineColor={colors.primary}
-                  autoComplete="new-password"
-                  textContentType="oneTimeCode"
+                  autoComplete="off"
+                  textContentType="none"
                   autoCorrect={false}
                   spellCheck={false}
                   right={null}
@@ -496,7 +548,7 @@ const InventoryListScreen = ({ navigation, route }) => {
                   disabled={adjustmentLoading}
                   style={[styles.actionButton, styles.checkInButton]}
                   buttonColor={colors.success}
-                  icon="plus"
+                  
                 >
                   Check In
                 </Button>
@@ -508,7 +560,7 @@ const InventoryListScreen = ({ navigation, route }) => {
                   disabled={adjustmentLoading}
                   style={[styles.actionButton, styles.checkOutButton]}
                   buttonColor={colors.danger}
-                  icon="cart-remove"
+                  
                 >
                   Checkout
                 </Button>
@@ -525,7 +577,7 @@ const InventoryListScreen = ({ navigation, route }) => {
                   disabled={adjustmentLoading}
                   style={styles.editButton}
                   textColor={colors.primary}
-                  icon="pencil"
+                  
                 >
                   Edit Item
                 </Button>
@@ -538,7 +590,7 @@ const InventoryListScreen = ({ navigation, route }) => {
                   }}
                   disabled={adjustmentLoading}
                   textColor={colors.danger}
-                  icon="delete"
+                  
                 >
                   Delete
                 </Button>
@@ -548,6 +600,85 @@ const InventoryListScreen = ({ navigation, route }) => {
                 mode="text"
                 onPress={() => setQuickActionsVisible(false)}
                 disabled={adjustmentLoading}
+                style={styles.cancelButton}
+                textColor={colors.textSecondary}
+              >
+                Cancel
+              </Button>
+            </View>
+          </Surface>
+        </View>
+      </Modal>
+
+      {/* Checkout Options Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={checkoutOptionsVisible}
+        onRequestClose={() => setCheckoutOptionsVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Surface style={styles.modalSurface}>
+            <View style={styles.modalContent}>
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderContent}>
+                  <View style={styles.modalHeaderIcon}>
+                    <Text style={styles.checkoutIcon}>📤</Text>
+                  </View>
+                  <View style={styles.modalHeaderText}>
+                    <Title style={styles.modalTitle}>Checkout Options</Title>
+                    <Paragraph style={styles.modalSubtitle}>
+                      Choose how you'd like to checkout items
+                    </Paragraph>
+                  </View>
+                </View>
+              </View>
+
+              {/* Options */}
+              <View style={styles.checkoutOptionsContainer}>
+                <TouchableOpacity 
+                  style={styles.checkoutOption}
+                  onPress={() => {
+                    setCheckoutOptionsVisible(false);
+                    navigation.navigate('Scanner');
+                  }}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Text style={styles.optionIcon}>📱</Text>
+                  </View>
+                  <View style={styles.optionContent}>
+                    <Title style={styles.optionTitle}>Scan Barcode</Title>
+                    <Paragraph style={styles.optionDescription}>
+                      Use camera to scan item barcodes for quick checkout
+                    </Paragraph>
+                  </View>
+                  <Text style={styles.optionChevron}>›</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.checkoutOption}
+                  onPress={() => {
+                    setCheckoutOptionsVisible(false);
+                    navigation.navigate('Checkout');
+                  }}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Text style={styles.optionIcon}>📋</Text>
+                  </View>
+                  <View style={styles.optionContent}>
+                    <Title style={styles.optionTitle}>Manual Checkout</Title>
+                    <Paragraph style={styles.optionDescription}>
+                      Browse inventory list and manually select items to checkout
+                    </Paragraph>
+                  </View>
+                  <Text style={styles.optionChevron}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Button
+                mode="text"
+                onPress={() => setCheckoutOptionsVisible(false)}
                 style={styles.cancelButton}
                 textColor={colors.textSecondary}
               >
@@ -729,7 +860,11 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     right: 0,
     bottom: 0,
-    borderRadius: borderRadius.round,
+    width: 80,
+    height: 64,
+    borderRadius: borderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
     ...shadows.large,
   },
   fabScan: {
@@ -737,8 +872,23 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     right: 0,
     bottom: 80,
-    borderRadius: borderRadius.round,
+    width: 80,
+    height: 64,
+    borderRadius: borderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
     ...shadows.large,
+  },
+  fabIcon: {
+    fontSize: 20,
+    color: colors.white,
+    marginBottom: 2,
+  },
+  fabLabel: {
+    fontSize: 10,
+    color: colors.white,
+    fontWeight: typography.fontWeight.medium,
+    textAlign: 'center',
   },
   // Quick Actions Modal Styles
   modalOverlay: {
@@ -840,6 +990,92 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     alignSelf: 'center',
+  },
+  // Checkout Options Modal Styles
+  checkoutIcon: {
+    fontSize: 24,
+    textAlign: 'center',
+  },
+  checkoutOptionsContainer: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  checkoutOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  optionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primaryLight + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  optionIcon: {
+    fontSize: 24,
+  },
+  optionContent: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  optionDescription: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: typography.lineHeight.relaxed * typography.fontSize.sm,
+  },
+  optionChevron: {
+    fontSize: 24,
+    color: colors.textLight,
+    marginLeft: spacing.sm,
+  },
+  // Location Filter Styles
+  locationContainer: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  locationLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  locationScroll: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  locationChip: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: spacing.xs,
+  },
+  selectedLocationChip: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  locationChipText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+  },
+  selectedLocationChipText: {
+    color: colors.white,
+    fontWeight: typography.fontWeight.medium,
   },
 });
 

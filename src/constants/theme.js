@@ -28,6 +28,10 @@ export const colors = {
   dangerLight: '#EC7063',
   dangerDark: '#C0392B',
   
+  info: '#3498DB',
+  infoLight: '#85C1E9',
+  infoDark: '#2874A6',
+  
   // Neutral Colors
   white: '#FFFFFF',
   lightGray: '#F8F9FA',
@@ -43,6 +47,7 @@ export const colors = {
   // Text Colors
   textPrimary: '#212529',
   textSecondary: '#6C757D',
+  textTertiary: '#ADB5BD',
   textLight: '#ADB5BD',
   textOnPrimary: '#FFFFFF',
   
