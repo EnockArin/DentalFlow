@@ -1,595 +1,275 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, Modal, Animated, Dimensions, StatusBar, Platform, TouchableOpacity } from 'react-native';
-import { Button, Card, Title, Paragraph, Surface, Chip, TextInput } from 'react-native-paper';
-import CustomTextInput from '../components/common/CustomTextInput';
-
-// Conditionally import BarCodeScanner to handle simulator environments
-let BarCodeScanner;
-try {
-  BarCodeScanner = require('expo-barcode-scanner').BarCodeScanner;
-} catch (error) {
-  console.warn('BarCodeScanner not available in this environment');
-}
+import { View, Text, StyleSheet, Alert, StatusBar, Platform } from 'react-native';
+import { Button, Card, Title, Paragraph } from 'react-native-paper';
+import { colors, spacing, borderRadius } from '../constants/theme';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useSelector } from 'react-redux';
-import { colors, spacing, borderRadius, typography, shadows } from '../constants/theme';
-import { globalFormStyles } from '../styles/globalFormFixes';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const SCAN_AREA_SIZE = screenWidth * 0.7;
+// Use expo-camera instead of expo-barcode-scanner
+let Camera, CameraView;
+let cameraError = null;
 
-const BarcodeScannerScreen = ({ navigation, route }) => {
+try {
+  const cameraModule = require('expo-camera');
+  Camera = cameraModule.Camera;
+  CameraView = cameraModule.CameraView;
+  console.log('✅ expo-camera loaded successfully');
+} catch (error) {
+  console.error('❌ expo-camera not available:', error);
+  cameraError = error.message;
+}
+
+const BarcodeScannerScreen = ({ navigation }) => {
   const { user } = useSelector((state) => state.auth);
   const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [scannedItem, setScannedItem] = useState(null);
-  const [quantity, setQuantity] = useState('1');
-  const [loading, setLoading] = useState(false);
-  const [scanLineAnim] = useState(new Animated.Value(0));
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const [scannedData, setScannedData] = useState(null);
+  const [cameraReady, setCameraReady] = useState(false);
 
   useEffect(() => {
-    // Scanning line animation
-    const scanAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scanLineAnim, {
-          toValue: 1,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scanLineAnim, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    
-    // Fade in animation
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-    
-    scanAnimation.start();
-    
-    return () => scanAnimation.stop();
+    requestCameraPermission();
   }, []);
 
-  useEffect(() => {
-    const getBarCodeScannerPermissions = async () => {
-      console.log('📱 Device Platform:', Platform.OS);
-      console.log('🔍 BarCodeScanner available:', !!BarCodeScanner);
-      
-      // Check if we're in a simulator or if BarCodeScanner is available
-      if (!BarCodeScanner || Platform.OS === 'web') {
-        console.log('❌ BarCodeScanner not available - simulator or web');
-        setHasPermission(false);
-        return;
-      }
-      
-      try {
-        // First check current permission status
-        const { status: currentStatus } = await BarCodeScanner.getPermissionsAsync();
-        console.log('🔐 Current camera permission status:', currentStatus);
-        
-        if (currentStatus === 'granted') {
-          console.log('✅ Camera permission already granted');
-          setHasPermission(true);
-          return;
-        }
-        
-        // If not granted, request permission
-        console.log('🔄 Requesting camera permission...');
-        const { status } = await BarCodeScanner.requestPermissionsAsync();
-        console.log('📋 Requested camera permission status:', status);
-        
-        const granted = status === 'granted';
-        setHasPermission(granted);
-        
-        if (!granted) {
-          console.log('❌ Camera permission denied by user');
-          Alert.alert(
-            'Camera Permission Required',
-            'DentalFlow needs camera access to scan barcodes. Please grant camera permission in your device settings.',
-            [{ text: 'OK' }]
-          );
-        } else {
-          console.log('✅ Camera permission granted successfully');
-        }
-      } catch (error) {
-        console.error('💥 Error with camera permissions:', error);
-        Alert.alert('Permission Error', `Failed to request camera permission: ${error.message}`);
-        setHasPermission(false);
-      }
-    };
-
-    getBarCodeScannerPermissions();
-  }, []);
-
-  const handleBarCodeScanned = async ({ type, data }) => {
-    console.log('Barcode scanned:', { type, data });
-    setScanned(true);
-    
-    // Add visual/haptic feedback
-    try {
-      const { Haptics } = require('expo-haptics');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (error) {
-      console.log('Haptics not available:', error);
+  const requestCameraPermission = async () => {
+    if (!Camera || Platform.OS === 'web') {
+      console.log('Camera not available');
+      setHasPermission(false);
+      return;
     }
-    
+
+    try {
+      console.log('🔄 Requesting camera permission...');
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      console.log('📋 Camera permission status:', status);
+      setHasPermission(status === 'granted');
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Camera Permission Required',
+          'This app needs camera access to scan barcodes. Please grant camera permission.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Permission error:', error);
+      setHasPermission(false);
+      Alert.alert('Error', `Camera permission failed: ${error.message}`);
+    }
+  };
+
+  const handleBarCodeScanned = async (scanningResult) => {
+    if (scanned) return;
+
+    console.log('🔍 Barcode scanned:', scanningResult);
+    setScanned(true);
+    setScannedData(scanningResult);
+
+    const { type, data } = scanningResult;
+
     try {
       // Query Firestore for item with this barcode
       const q = query(collection(db, 'inventory'), where('barcode', '==', data));
       const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
-        // Item exists - show check in/out modal
+        // Item exists - show success message
         const itemDoc = querySnapshot.docs[0];
         const itemData = { id: itemDoc.id, ...itemDoc.data() };
-        console.log('Found item for barcode:', itemData.productName);
-        setScannedItem(itemData);
-        setModalVisible(true);
+        
+        Alert.alert(
+          'Item Found!',
+          `Found: ${itemData.productName}\nBarcode: ${data}\nCurrent Stock: ${itemData.currentQuantity}`,
+          [
+            { text: 'Scan Again', onPress: resetScanner },
+            { text: 'View Item', onPress: () => navigation.navigate('ItemDetail', { item: itemData }) }
+          ]
+        );
       } else {
-        // Item not found - navigate to add new item with barcode prefilled
-        console.log('No item found for barcode:', data);
+        // Item not found
         Alert.alert(
           'Item Not Found',
           `No item found with barcode: ${data}\n\nWould you like to add a new item?`,
           [
-            { text: 'Cancel', onPress: () => setScanned(false) },
+            { text: 'Scan Again', onPress: resetScanner },
             { 
               text: 'Add Item', 
-              onPress: () => {
-                navigation.replace('ItemDetail', { barcode: data });
-              }
-            },
+              onPress: () => navigation.replace('ItemDetail', { barcode: data })
+            }
           ]
         );
       }
     } catch (error) {
       console.error('Error querying barcode:', error);
       Alert.alert('Error', 'Failed to look up barcode. Please try again.');
-      setScanned(false);
-    }
-  };
-
-  const handleStockMovement = async (type) => {
-    if (!quantity.trim() || isNaN(parseInt(quantity)) || parseInt(quantity) <= 0) {
-      Alert.alert('Invalid Quantity', 'Please enter a valid positive number');
-      return;
-    }
-
-    const quantityChange = parseInt(quantity);
-    const newQuantity = type === 'in' 
-      ? scannedItem.currentQuantity + quantityChange
-      : scannedItem.currentQuantity - quantityChange;
-
-    if (newQuantity < 0) {
-      Alert.alert('Invalid Operation', 'Not enough stock to check out this quantity');
-      return;
-    }
-
-    setLoading(type);
-
-    try {
-      // Update inventory item
-      const itemRef = doc(db, 'inventory', scannedItem.id);
-      await updateDoc(itemRef, { 
-        currentQuantity: newQuantity,
-        lastUpdated: Timestamp.now()
-      });
-
-      // Log stock movement
-      await addDoc(collection(db, 'stockLog'), {
-        inventoryId: scannedItem.id,
-        userId: user?.uid,
-        userEmail: user?.email,
-        changeType: type,
-        quantityChanged: quantityChange,
-        previousQuantity: scannedItem.currentQuantity,
-        newQuantity: newQuantity,
-        timestamp: Timestamp.now(),
-        productName: scannedItem.productName, // For easy reporting
-      });
-
-      Alert.alert(
-        'Success',
-        type === 'in' 
-          ? `Added ${quantityChange} units to stock\n\nNew quantity: ${newQuantity}`
-          : `Checked out ${quantityChange} units of ${scannedItem.productName}\n\nRemaining quantity: ${newQuantity}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setModalVisible(false);
-              setScanned(false);
-              setQuantity('1');
-              setScannedItem(null);
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('Error updating stock:', error);
-      Alert.alert('Error', 'Failed to update stock. Please try again.');
-    } finally {
-      setLoading(null);
+      resetScanner();
     }
   };
 
   const resetScanner = () => {
     setScanned(false);
-    setModalVisible(false);
-    setScannedItem(null);
-    setQuantity('1');
+    setScannedData(null);
   };
+
+  if (cameraError) {
+    return (
+      <View style={styles.errorContainer}>
+        <Card style={styles.errorCard}>
+          <Card.Content>
+            <Title style={styles.errorTitle}>Camera Not Available</Title>
+            <Paragraph style={styles.errorText}>
+              {cameraError}
+            </Paragraph>
+            <Paragraph style={styles.errorText}>
+              This might be because:
+              • The app is running in a simulator
+              • Camera permissions are not available
+              • Native modules are not properly linked
+            </Paragraph>
+            <Button 
+              mode="contained" 
+              onPress={() => navigation.goBack()}
+              style={styles.button}
+              buttonColor={colors.primary}
+            >
+              Back to Dashboard
+            </Button>
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  }
 
   if (hasPermission === null) {
     return (
-      <View style={styles.permissionContainer}>
-        <TouchableOpacity
-          
-          size={64}
-          
-          style={styles.permissionIcon}
-        />
-        <Title style={styles.permissionTitle}>Camera Permission</Title>
-        <Paragraph style={styles.permissionText}>
-          Requesting access to your camera to scan barcodes...
-        </Paragraph>
+      <View style={styles.loadingContainer}>
+        <Title>Requesting camera permission...</Title>
       </View>
     );
   }
 
   if (hasPermission === false) {
-    const isSimulator = !BarCodeScanner || Platform.OS === 'web';
-    
     return (
-      <View style={styles.permissionContainer}>
-        <TouchableOpacity
-          icon={isSimulator ? "cellphone-off" : "camera-off"}
-          size={64}
-          
-          style={styles.permissionIcon}
-        />
-        <Title style={styles.permissionTitle}>
-          {isSimulator ? 'Simulator Limitation' : 'Camera Access Denied'}
-        </Title>
-        <Paragraph style={styles.permissionText}>
-          {isSimulator 
-            ? 'Barcode scanning is not available in the iOS simulator or web browser. Please test on a physical device for full camera functionality.'
-            : 'Camera access is required to scan barcodes. Please enable camera permissions in your device settings.'
-          }
-        </Paragraph>
-        
-        {isSimulator && (
-          <View style={styles.simulatorInfo}>
-            <Paragraph style={styles.simulatorText}>
-              💡 You can still test the app's other features:
+      <View style={styles.errorContainer}>
+        <Card style={styles.errorCard}>
+          <Card.Content>
+            <Title style={styles.errorTitle}>Camera Access Denied</Title>
+            <Paragraph style={styles.errorText}>
+              Camera access is required to scan barcodes. Please enable camera permissions in your device settings.
             </Paragraph>
-            <Paragraph style={styles.simulatorText}>
-              • Add items manually via the Inventory screen
-            </Paragraph>
-            <Paragraph style={styles.simulatorText}>
-              • Test all inventory management features
-            </Paragraph>
-            <Paragraph style={styles.simulatorText}>
-              • Try the Dashboard and Settings
-            </Paragraph>
-          </View>
-        )}
-        
-        <View style={styles.permissionActions}>
-          <Button 
-            mode="contained" 
-            onPress={() => navigation.goBack()}
-            style={styles.permissionButton}
-            buttonColor={colors.primary}
-          >
-            Back to Dashboard
-          </Button>
-          
-          {!isSimulator && (
+            <Button 
+              mode="contained" 
+              onPress={requestCameraPermission}
+              style={styles.button}
+              buttonColor={colors.primary}
+            >
+              Request Permission Again
+            </Button>
             <Button 
               mode="outlined" 
-              onPress={() => {
-                Alert.alert(
-                  'Camera Permission Required',
-                  'To enable barcode scanning:\n\n1. Go to your device Settings\n2. Find DentalFlow in Apps\n3. Enable Camera permission\n4. Return to this screen',
-                  [
-                    { text: 'OK' },
-                    { 
-                      text: 'Retry Permission', 
-                      onPress: () => {
-                        setHasPermission(null);
-                        // Re-trigger permission check
-                        const getBarCodeScannerPermissions = async () => {
-                          try {
-                            const { status } = await BarCodeScanner.requestPermissionsAsync();
-                            setHasPermission(status === 'granted');
-                          } catch (error) {
-                            console.error('Error requesting permission:', error);
-                            setHasPermission(false);
-                          }
-                        };
-                        getBarCodeScannerPermissions();
-                      }
-                    }
-                  ]
-                );
-              }}
-              style={[styles.permissionButton, { marginTop: spacing.md }]}
-              textColor={colors.primary}
+              onPress={() => navigation.goBack()}
+              style={styles.button}
             >
-              Enable Camera Access
+              Back to Dashboard
             </Button>
-          )}
-        </View>
+          </Card.Content>
+        </Card>
       </View>
     );
   }
 
-  // Add camera ready handler
-  const onCameraReady = () => {
-    console.log('📷 Camera is ready');
-  };
-
-  const onMountError = (error) => {
-    console.error('💥 Camera mount error:', error);
-    Alert.alert('Camera Error', `Failed to initialize camera: ${error.message}`);
-  };
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="black" />
-      {BarCodeScanner && hasPermission === true ? (
-        <BarCodeScanner
-          onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-          onCameraReady={onCameraReady}
-          onMountError={onMountError}
-          style={StyleSheet.absoluteFillObject}
-          barCodeTypes={[
-            BarCodeScanner.Constants.BarCodeType.qr,
-            BarCodeScanner.Constants.BarCodeType.ean13,
-            BarCodeScanner.Constants.BarCodeType.ean8,
-            BarCodeScanner.Constants.BarCodeType.code39,
-            BarCodeScanner.Constants.BarCodeType.code128,
-            BarCodeScanner.Constants.BarCodeType.code93,
-            BarCodeScanner.Constants.BarCodeType.codabar,
-            BarCodeScanner.Constants.BarCodeType.datamatrix,
-            BarCodeScanner.Constants.BarCodeType.pdf417,
-          ]}
-        />
-      ) : (
-        <View style={styles.noCameraContainer}>
-          <Text style={styles.noCameraText}>
-            {hasPermission === false 
-              ? 'Camera permission not granted' 
-              : hasPermission === null 
-              ? 'Requesting camera permission...'
-              : 'Camera not available'
-            }
-          </Text>
-        </View>
-      )}
       
-      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Surface style={styles.headerSurface}>
-            <View style={styles.headerContent}>
-              <TouchableOpacity
-                
-                size={24}
-                
-                onPress={() => navigation.goBack()}
-                style={styles.backButton}
-              />
-              <View style={styles.headerTextContainer}>
-                <Title style={styles.headerTitle}>Barcode Scanner</Title>
-                <Paragraph style={styles.headerSubtitle}>
-                  Scan to add or checkout items
-                </Paragraph>
-              </View>
+      {CameraView ? (
+        <CameraView
+          style={styles.camera}
+          facing="back"
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'code93', 'codabar', 'datamatrix', 'pdf417'],
+          }}
+        >
+          <View style={styles.overlay}>
+            <View style={styles.header}>
+              <Card style={styles.headerCard}>
+                <Card.Content style={styles.headerContent}>
+                  <Title style={styles.headerTitle}>Barcode Scanner</Title>
+                  <Paragraph style={styles.headerSubtitle}>
+                    {scanned ? 'Barcode Scanned!' : 'Point camera at barcode'}
+                  </Paragraph>
+                </Card.Content>
+              </Card>
             </View>
-          </Surface>
-        </View>
-        
-        {/* Scanning Area */}
-        <View style={styles.scanContainer}>
-          <View style={styles.scanAreaWrapper}>
-            {/* Corner borders */}
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
-            
-            {/* Scanning line */}
-            <Animated.View
-              style={[
-                styles.scanLine,
-                {
-                  transform: [
-                    {
-                      translateY: scanLineAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, SCAN_AREA_SIZE - 4],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-            
-            {/* Scan frame overlay */}
+
             <View style={styles.scanFrame}>
-              <View style={styles.scanFrameInner} />
+              <View style={styles.scanFrameCorner} />
+            </View>
+
+            <View style={styles.footer}>
+              <Card style={styles.footerCard}>
+                <Card.Content style={styles.footerContent}>
+                  {scannedData && (
+                    <View style={styles.scannedInfo}>
+                      <Paragraph style={styles.scannedText}>
+                        Type: {scannedData.type}
+                      </Paragraph>
+                      <Paragraph style={styles.scannedText}>
+                        Data: {scannedData.data}
+                      </Paragraph>
+                    </View>
+                  )}
+                  <Button 
+                    mode="contained" 
+                    onPress={() => navigation.goBack()}
+                    style={styles.button}
+                    buttonColor={colors.danger}
+                  >
+                    Back
+                  </Button>
+                  {scanned && (
+                    <Button 
+                      mode="outlined" 
+                      onPress={resetScanner}
+                      style={styles.button}
+                    >
+                      Scan Again
+                    </Button>
+                  )}
+                </Card.Content>
+              </Card>
             </View>
           </View>
-        </View>
-        
-        {/* Bottom Info */}
-        <View style={styles.bottomContainer}>
-          <Surface style={styles.instructionSurface}>
-            <View style={styles.instructionContent}>
-              <TouchableOpacity
-                
-                size={32}
-                
-                style={styles.instructionIcon}
-              />
-              <Title style={styles.instructionTitle}>
-                {scanned ? 'Barcode Scanned!' : 'Scanning for Barcode'}
-              </Title>
-              <Paragraph style={styles.instructionText}>
-                {scanned 
-                  ? 'Processing barcode data...' 
-                  : 'Position the barcode within the frame above'
-                }
-              </Paragraph>
-              
-              {scanned && (
-                <Button 
-                  mode="contained"
-                  onPress={resetScanner}
-                  style={styles.scanAgainButton}
-                  buttonColor={colors.primary}
-                  
-                  compact
-                >
-                  Scan Again
-                </Button>
-              )}
+        </CameraView>
+      ) : Camera ? (
+        <Camera
+          style={styles.camera}
+          type={Camera.Constants.Type.back}
+          onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barCodeScannerSettings={{
+            barCodeTypes: [Camera.Constants.BarCodeType.qr, Camera.Constants.BarCodeType.ean13],
+          }}
+        >
+          <View style={styles.overlay}>
+            <View style={styles.header}>
+              <Title style={styles.headerTitle}>Scanning Barcode...</Title>
             </View>
-          </Surface>
+            <Button 
+              mode="contained" 
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+              buttonColor={colors.danger}
+            >
+              Back
+            </Button>
+          </View>
+        </Camera>
+      ) : (
+        <View style={styles.errorContainer}>
+          <Title>Camera component not available</Title>
         </View>
-      </Animated.View>
-
-      {/* Stock Movement Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Surface style={styles.modalSurface}>
-            <View style={styles.modalContent}>
-              {/* Modal Header */}
-              <View style={styles.modalHeader}>
-                <View style={styles.modalHeaderContent}>
-                  <TouchableOpacity
-                    
-                    size={32}
-                    
-                    style={styles.modalHeaderIcon}
-                  />
-                  <View style={styles.modalHeaderText}>
-                    <Title style={styles.modalTitle}>Item Found!</Title>
-                    <Paragraph style={styles.modalSubtitle}>
-                      Choose your action
-                    </Paragraph>
-                  </View>
-                </View>
-                <Chip 
-                   
-                  style={styles.barcodeChip}
-                  textStyle={styles.barcodeChipText}
-                >
-                  {scannedItem?.barcode}
-                </Chip>
-              </View>
-              
-              {/* Item Information */}
-              <View style={styles.itemInfo}>
-                <Title style={styles.itemName} numberOfLines={2}>
-                  {scannedItem?.productName}
-                </Title>
-                
-                <View style={styles.stockInfo}>
-                  <View style={styles.stockItem}>
-                    <TouchableOpacity  size={20}  style={styles.stockIcon} />
-                    <Paragraph style={styles.stockLabel}>Current Stock</Paragraph>
-                    <Title style={[styles.stockValue, { color: colors.primary }]}>
-                      {scannedItem?.currentQuantity}
-                    </Title>
-                  </View>
-                  <View style={styles.stockDivider} />
-                  <View style={styles.stockItem}>
-                    <TouchableOpacity  size={20}  style={styles.stockIcon} />
-                    <Paragraph style={styles.stockLabel}>Min Level</Paragraph>
-                    <Title style={[styles.stockValue, { color: colors.warning }]}>
-                      {scannedItem?.minStockLevel}
-                    </Title>
-                  </View>
-                </View>
-              </View>
-
-              {/* Quantity Input */}
-              <View style={[styles.quantitySection, globalFormStyles.formContainer]}>
-                <Paragraph style={styles.quantityLabel}>Quantity</Paragraph>
-                <CustomTextInput
-                  value={quantity}
-                  onChangeText={setQuantity}
-                  mode="outlined"
-                  keyboardType="numeric"
-                  style={[styles.quantityInput, globalFormStyles.hideValidationIndicators]}
-                  left={<TextInput.Icon  />}
-                  outlineColor={colors.borderLight}
-                  activeOutlineColor={colors.primary}
-                  autoComplete="off"
-                  textContentType="none"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  right={null}
-                />
-              </View>
-
-              {/* Action Buttons */}
-              <View style={styles.modalActions}>
-                <Button
-                  mode="contained"
-                  onPress={() => handleStockMovement('in')}
-                  loading={loading === 'in'}
-                  disabled={loading}
-                  style={[styles.actionButton, styles.checkInButton]}
-                  buttonColor={colors.success}
-                  
-                >
-                  Add Stock
-                </Button>
-
-                <Button
-                  mode="contained"
-                  onPress={() => handleStockMovement('out')}
-                  loading={loading === 'out'}
-                  disabled={loading}
-                  style={[styles.actionButton, styles.checkOutButton]}
-                  buttonColor={colors.danger}
-                  
-                >
-                  Checkout
-                </Button>
-              </View>
-
-              <Button
-                mode="text"
-                onPress={resetScanner}
-                disabled={loading}
-                style={styles.cancelButton}
-                textColor={colors.textSecondary}
-              >
-                Cancel
-              </Button>
-            </View>
-          </Surface>
-        </View>
-      </Modal>
+      )}
     </View>
   );
 };
@@ -599,331 +279,96 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.black,
   },
-  permissionContainer: {
+  camera: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    padding: spacing.xl,
-  },
-  permissionIcon: {
-    marginBottom: spacing.lg,
-    backgroundColor: colors.lightGray,
-  },
-  permissionTitle: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-    color: colors.textPrimary,
-  },
-  permissionText: {
-    fontSize: typography.fontSize.md,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
-    lineHeight: typography.lineHeight.relaxed * typography.fontSize.md,
-  },
-  permissionActions: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  permissionButton: {
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing.xl,
-  },
-  simulatorInfo: {
-    backgroundColor: colors.primaryLight + '15',
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginVertical: spacing.lg,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
-  },
-  simulatorText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-    lineHeight: typography.lineHeight.relaxed * typography.fontSize.sm,
   },
   overlay: {
     flex: 1,
+    backgroundColor: 'transparent',
+    justifyContent: 'space-between',
   },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    paddingTop: spacing.xl,
+    paddingTop: 60,
     paddingHorizontal: spacing.md,
   },
-  headerSurface: {
+  headerCard: {
     backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
   },
   headerContent: {
-    flexDirection: 'row',
     alignItems: 'center',
-  },
-  backButton: {
-    margin: 0,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  headerTextContainer: {
-    flex: 1,
-    marginLeft: spacing.sm,
   },
   headerTitle: {
     color: colors.white,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   headerSubtitle: {
     color: colors.white,
-    fontSize: typography.fontSize.sm,
+    textAlign: 'center',
     opacity: 0.8,
-  },
-  scanContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scanAreaWrapper: {
-    width: SCAN_AREA_SIZE,
-    height: SCAN_AREA_SIZE,
-    position: 'relative',
   },
   scanFrame: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-  },
-  scanFrameInner: {
-    width: '100%',
-    height: '100%',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: 'transparent',
-  },
-  corner: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: colors.white,
-  },
-  topLeft: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-  },
-  topRight: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-  },
-  bottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-  },
-  bottomRight: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-  },
-  scanLine: {
-    position: 'absolute',
-    left: 2,
-    right: 2,
-    height: 2,
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-  },
-  bottomContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  instructionSurface: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-  },
-  instructionContent: {
-    alignItems: 'center',
-  },
-  instructionIcon: {
-    marginBottom: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  instructionTitle: {
-    color: colors.white,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.semibold,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  instructionText: {
-    color: colors.white,
-    fontSize: typography.fontSize.sm,
-    textAlign: 'center',
-    opacity: 0.8,
-    marginBottom: spacing.md,
-  },
-  scanAgainButton: {
-    marginTop: spacing.sm,
-  },
-  modalOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: spacing.md,
   },
-  modalSurface: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.surface,
-    ...shadows.large,
+  scanFrameCorner: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
   },
-  modalContent: {
-    padding: spacing.xl,
+  footer: {
+    paddingBottom: 40,
+    paddingHorizontal: spacing.md,
   },
-  modalHeader: {
+  footerCard: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+  },
+  footerContent: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
   },
-  modalHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  scannedInfo: {
     marginBottom: spacing.md,
   },
-  modalHeaderIcon: {
-    margin: 0,
-    marginRight: spacing.md,
-    backgroundColor: colors.successLight + '20',
-  },
-  modalHeaderText: {
-    flex: 1,
-  },
-  modalTitle: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  modalSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
-  },
-  barcodeChip: {
-    backgroundColor: colors.primaryLight + '20',
-  },
-  barcodeChipText: {
-    color: colors.primary,
-    fontFamily: 'monospace',
-    fontSize: typography.fontSize.xs,
-  },
-  itemInfo: {
-    marginBottom: spacing.xl,
-  },
-  itemName: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.textPrimary,
+  scannedText: {
+    color: colors.white,
     textAlign: 'center',
-    marginBottom: spacing.lg,
   },
-  stockInfo: {
-    flexDirection: 'row',
-    backgroundColor: colors.lightGray,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
+  button: {
+    marginVertical: spacing.xs,
+    minWidth: 120,
   },
-  stockItem: {
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+  },
+  errorContainer: {
     flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: spacing.lg,
+    backgroundColor: colors.background,
   },
-  stockIcon: {
-    margin: 0,
-    marginBottom: spacing.xs,
-  },
-  stockLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  stockValue: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-  },
-  stockDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.md,
-  },
-  quantitySection: {
-    marginBottom: spacing.xl,
-  },
-  quantityLabel: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  quantityInput: {
-    backgroundColor: colors.surface,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: borderRadius.lg,
-  },
-  checkInButton: {
-    // Styles handled by buttonColor prop
-  },
-  checkOutButton: {
-    // Styles handled by buttonColor prop
-  },
-  fullWidthButton: {
+  errorCard: {
     width: '100%',
-    borderRadius: borderRadius.lg,
+    maxWidth: 400,
   },
-  cancelButton: {
-    alignSelf: 'center',
+  errorTitle: {
+    textAlign: 'center',
+    marginBottom: spacing.md,
   },
-  noCameraContainer: {
+  errorText: {
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.background,
-  },
-  noCameraText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    padding: spacing.xl,
   },
 });
 
