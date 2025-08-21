@@ -94,6 +94,12 @@ const DashboardScreen = ({ navigation }) => {
       color: colors.info,
     },
     {
+      title: 'Alt Scanner',
+      action: () => navigation.navigate('AlternativeScanner'),
+      mode: 'contained',
+      color: colors.success,
+    },
+    {
       title: 'Manual Add Item',
       action: () => navigation.navigate('ItemDetail'),
       mode: 'contained',
@@ -110,6 +116,13 @@ const DashboardScreen = ({ navigation }) => {
       action: () => navigation.navigate('Inventory'),
       mode: 'outlined',
       color: colors.primary,
+    },
+    {
+      title: 'Test Camera',
+      action: () => navigation.navigate('CameraTest'),
+      mode: 'outlined',
+      color: colors.warning,
+      icon: '🔍',
     },
     {
       title: `Shopping List (${lowStockItems.length})`,

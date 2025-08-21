@@ -8,26 +8,26 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		3AB9B36EFE561D8DD9AEDE50 /* libPods-DentalFlow.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C521BEB80C2C0B7C550A6537 /* libPods-DentalFlow.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		4F3BB50C085A39BB2A7A12F7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B381B912D3F916DE24789E13 /* PrivacyInfo.xcprivacy */; };
-		A6BC2D788603E001CDE15680 /* libPods-DentalFlow.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BC25380E0653B66757E1F550 /* libPods-DentalFlow.a */; };
+		7D437A76FDC2896743C6E23B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 911791027BE4E4C1EEC77164 /* PrivacyInfo.xcprivacy */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		E2AE74818570B969FB87E215 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE5F0884A2C735587B08CED /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
-		F9A37D4740844D5EC476B385 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F1189B68E433683197A5CAC /* ExpoModulesProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		13B07F961A680F5B00A75B9A /* DentalFlow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DentalFlow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = DentalFlow/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = DentalFlow/Info.plist; sourceTree = "<group>"; };
-		28435B12349F80B2048DD3F0 /* Pods-DentalFlow.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DentalFlow.debug.xcconfig"; path = "Target Support Files/Pods-DentalFlow/Pods-DentalFlow.debug.xcconfig"; sourceTree = "<group>"; };
-		8856A8CBA8D59F31D15F7615 /* Pods-DentalFlow.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DentalFlow.release.xcconfig"; path = "Target Support Files/Pods-DentalFlow/Pods-DentalFlow.release.xcconfig"; sourceTree = "<group>"; };
-		8F1189B68E433683197A5CAC /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-DentalFlow/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		15B559084251061B67D0457E /* Pods-DentalFlow.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DentalFlow.release.xcconfig"; path = "Target Support Files/Pods-DentalFlow/Pods-DentalFlow.release.xcconfig"; sourceTree = "<group>"; };
+		69D8696B0D23D7C163A458A8 /* Pods-DentalFlow.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DentalFlow.debug.xcconfig"; path = "Target Support Files/Pods-DentalFlow/Pods-DentalFlow.debug.xcconfig"; sourceTree = "<group>"; };
+		911791027BE4E4C1EEC77164 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = DentalFlow/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = DentalFlow/SplashScreen.storyboard; sourceTree = "<group>"; };
-		B381B912D3F916DE24789E13 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = DentalFlow/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		BC25380E0653B66757E1F550 /* libPods-DentalFlow.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-DentalFlow.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C521BEB80C2C0B7C550A6537 /* libPods-DentalFlow.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-DentalFlow.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EEE5F0884A2C735587B08CED /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-DentalFlow/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = DentalFlow/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* DentalFlow-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "DentalFlow-Bridging-Header.h"; path = "DentalFlow/DentalFlow-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -37,7 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A6BC2D788603E001CDE15680 /* libPods-DentalFlow.a in Frameworks */,
+				3AB9B36EFE561D8DD9AEDE50 /* libPods-DentalFlow.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,44 +53,34 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				B381B912D3F916DE24789E13 /* PrivacyInfo.xcprivacy */,
+				911791027BE4E4C1EEC77164 /* PrivacyInfo.xcprivacy */,
 			);
 			name = DentalFlow;
+			sourceTree = "<group>";
+		};
+		2CA67544D56E6A79D910CB51 /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				6913D3849A7E5E43A40E619B /* DentalFlow */,
+			);
+			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				BC25380E0653B66757E1F550 /* libPods-DentalFlow.a */,
+				C521BEB80C2C0B7C550A6537 /* libPods-DentalFlow.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		3E21889B49E9DE354216DB7F /* DentalFlow */ = {
+		6913D3849A7E5E43A40E619B /* DentalFlow */ = {
 			isa = PBXGroup;
 			children = (
-				8F1189B68E433683197A5CAC /* ExpoModulesProvider.swift */,
+				EEE5F0884A2C735587B08CED /* ExpoModulesProvider.swift */,
 			);
 			name = DentalFlow;
-			sourceTree = "<group>";
-		};
-		687E53513266185772215216 /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				3E21889B49E9DE354216DB7F /* DentalFlow */,
-			);
-			name = ExpoModulesProviders;
-			sourceTree = "<group>";
-		};
-		8096590E2976FF4881E671B4 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				28435B12349F80B2048DD3F0 /* Pods-DentalFlow.debug.xcconfig */,
-				8856A8CBA8D59F31D15F7615 /* Pods-DentalFlow.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -107,8 +97,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				8096590E2976FF4881E671B4 /* Pods */,
-				687E53513266185772215216 /* ExpoModulesProviders */,
+				F641E938D77E3FBA37945A8F /* Pods */,
+				2CA67544D56E6A79D910CB51 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -132,6 +122,16 @@
 			path = DentalFlow/Supporting;
 			sourceTree = "<group>";
 		};
+		F641E938D77E3FBA37945A8F /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				69D8696B0D23D7C163A458A8 /* Pods-DentalFlow.debug.xcconfig */,
+				15B559084251061B67D0457E /* Pods-DentalFlow.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -140,13 +140,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "DentalFlow" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				D5B63A162B3B010A9861BC68 /* [Expo] Configure project */,
+				AB26E90870334AC966CBBB8D /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				33CB23449E734E89B55B38F3 /* [CP] Embed Pods Frameworks */,
+				C32128E7153EEED1EA0D5E47 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -196,7 +196,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				4F3BB50C085A39BB2A7A12F7 /* PrivacyInfo.xcprivacy in Resources */,
+				7D437A76FDC2896743C6E23B /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,24 +238,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-		33CB23449E734E89B55B38F3 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-DentalFlow/Pods-DentalFlow-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-DentalFlow/Pods-DentalFlow-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
@@ -332,7 +314,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-DentalFlow/Pods-DentalFlow-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		D5B63A162B3B010A9861BC68 /* [Expo] Configure project */ = {
+		AB26E90870334AC966CBBB8D /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -351,6 +333,24 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-DentalFlow/expo-configure-project.sh\"\n";
 		};
+		C32128E7153EEED1EA0D5E47 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-DentalFlow/Pods-DentalFlow-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-DentalFlow/Pods-DentalFlow-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -359,7 +359,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				F9A37D4740844D5EC476B385 /* ExpoModulesProvider.swift in Sources */,
+				E2AE74818570B969FB87E215 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -368,7 +368,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 28435B12349F80B2048DD3F0 /* Pods-DentalFlow.debug.xcconfig */;
+			baseConfigurationReference = 69D8696B0D23D7C163A458A8 /* Pods-DentalFlow.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -404,7 +404,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 8856A8CBA8D59F31D15F7615 /* Pods-DentalFlow.release.xcconfig */;
+			baseConfigurationReference = 15B559084251061B67D0457E /* Pods-DentalFlow.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;

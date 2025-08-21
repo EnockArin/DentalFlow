@@ -22,6 +22,8 @@ import TreatmentKitsScreen from '../screens/TreatmentKitsScreen';
 import TreatmentKitDetailScreen from '../screens/TreatmentKitDetailScreen';
 import LocationsScreen from '../screens/LocationsScreen';
 import StockTransferScreen from '../screens/StockTransferScreen';
+import CameraTestScreen from '../screens/CameraTestScreen';
+import AlternativeBarcodeScannerScreen from '../screens/AlternativeBarcodeScannerScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -170,6 +172,16 @@ const AppNavigator = () => {
               name="StockTransfer" 
               component={StockTransferScreen}
               options={{ title: 'Stock Transfer' }}
+            />
+            <Stack.Screen 
+              name="CameraTest" 
+              component={CameraTestScreen}
+              options={{ title: 'Camera Test' }}
+            />
+            <Stack.Screen 
+              name="AlternativeScanner" 
+              component={AlternativeBarcodeScannerScreen}
+              options={{ title: 'Alternative Scanner', headerShown: false }}
             />
           </>
         )}

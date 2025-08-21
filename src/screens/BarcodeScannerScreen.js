@@ -61,9 +61,12 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
+      console.log('📱 Device Platform:', Platform.OS);
+      console.log('🔍 BarCodeScanner available:', !!BarCodeScanner);
+      
       // Check if we're in a simulator or if BarCodeScanner is available
       if (!BarCodeScanner || Platform.OS === 'web') {
-        console.log('BarCodeScanner not available - simulator or web');
+        console.log('❌ BarCodeScanner not available - simulator or web');
         setHasPermission(false);
         return;
       }
@@ -71,23 +74,35 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
       try {
         // First check current permission status
         const { status: currentStatus } = await BarCodeScanner.getPermissionsAsync();
-        console.log('Current camera permission status:', currentStatus);
+        console.log('🔐 Current camera permission status:', currentStatus);
         
         if (currentStatus === 'granted') {
+          console.log('✅ Camera permission already granted');
           setHasPermission(true);
           return;
         }
         
         // If not granted, request permission
+        console.log('🔄 Requesting camera permission...');
         const { status } = await BarCodeScanner.requestPermissionsAsync();
-        console.log('Requested camera permission status:', status);
-        setHasPermission(status === 'granted');
+        console.log('📋 Requested camera permission status:', status);
         
-        if (status !== 'granted') {
-          console.log('Camera permission denied by user');
+        const granted = status === 'granted';
+        setHasPermission(granted);
+        
+        if (!granted) {
+          console.log('❌ Camera permission denied by user');
+          Alert.alert(
+            'Camera Permission Required',
+            'DentalFlow needs camera access to scan barcodes. Please grant camera permission in your device settings.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          console.log('✅ Camera permission granted successfully');
         }
       } catch (error) {
-        console.error('Error with camera permissions:', error);
+        console.error('💥 Error with camera permissions:', error);
+        Alert.alert('Permission Error', `Failed to request camera permission: ${error.message}`);
         setHasPermission(false);
       }
     };
@@ -319,14 +334,48 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     );
   }
 
+  // Add camera ready handler
+  const onCameraReady = () => {
+    console.log('📷 Camera is ready');
+  };
+
+  const onMountError = (error) => {
+    console.error('💥 Camera mount error:', error);
+    Alert.alert('Camera Error', `Failed to initialize camera: ${error.message}`);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="black" />
-      {BarCodeScanner && (
+      {BarCodeScanner && hasPermission === true ? (
         <BarCodeScanner
           onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+          onCameraReady={onCameraReady}
+          onMountError={onMountError}
           style={StyleSheet.absoluteFillObject}
+          barCodeTypes={[
+            BarCodeScanner.Constants.BarCodeType.qr,
+            BarCodeScanner.Constants.BarCodeType.ean13,
+            BarCodeScanner.Constants.BarCodeType.ean8,
+            BarCodeScanner.Constants.BarCodeType.code39,
+            BarCodeScanner.Constants.BarCodeType.code128,
+            BarCodeScanner.Constants.BarCodeType.code93,
+            BarCodeScanner.Constants.BarCodeType.codabar,
+            BarCodeScanner.Constants.BarCodeType.datamatrix,
+            BarCodeScanner.Constants.BarCodeType.pdf417,
+          ]}
         />
+      ) : (
+        <View style={styles.noCameraContainer}>
+          <Text style={styles.noCameraText}>
+            {hasPermission === false 
+              ? 'Camera permission not granted' 
+              : hasPermission === null 
+              ? 'Requesting camera permission...'
+              : 'Camera not available'
+            }
+          </Text>
+        </View>
       )}
       
       <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
@@ -863,6 +912,18 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     alignSelf: 'center',
+  },
+  noCameraContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  noCameraText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    padding: spacing.xl,
   },
 });
 
