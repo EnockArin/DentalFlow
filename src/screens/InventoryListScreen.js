@@ -857,11 +857,13 @@ const styles = StyleSheet.create({
   },
   exportButton: {
     borderColor: colors.success || '#4caf50',
-    minWidth: 100,
+    minWidth: 120,
   },
   exportButtonContent: {
-    height: 36,
-    paddingHorizontal: 16,
+    height: 40,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterChip: {
     borderRadius: borderRadius.lg,

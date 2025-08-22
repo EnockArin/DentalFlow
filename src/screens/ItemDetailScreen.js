@@ -12,6 +12,7 @@ import {
   TextInput
 } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
+import LocationPicker from '../components/common/LocationPicker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { addDoc, collection, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -42,7 +43,6 @@ const ItemDetailScreen = ({ navigation, route }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
 
@@ -83,25 +83,6 @@ const ItemDetailScreen = ({ navigation, route }) => {
     ]).start();
   }, []);
 
-  useEffect(() => {
-    if (item) {
-      setFormData({
-        productName: item.productName || '',
-        barcode: item.barcode || '',
-        currentQuantity: '', // Leave blank when editing since we're adding stock
-        minStockLevel: item.minStockLevel?.toString() || '',
-        locationId: item.locationId || '',
-        locationName: item.locationName || item.location || '',
-        cost: item.cost?.toString() || '',
-        expiryDate: item.expiryDate || null,
-      });
-    } else if (scannedBarcode) {
-      setFormData(prev => ({
-        ...prev,
-        barcode: scannedBarcode,
-      }));
-    }
-  }, [item, scannedBarcode]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -217,12 +198,11 @@ const ItemDetailScreen = ({ navigation, route }) => {
         <Surface style={styles.headerCard}>
           <View style={styles.header}>
             <View style={styles.headerContent}>
-              <TouchableOpacity
-                icon={isEditing ? 'pencil' : 'plus-circle'}
-                size={32}
-                
-                style={styles.headerIcon}
-              />
+              <View style={styles.headerIcon}>
+                <Text style={styles.headerIconText}>
+                  {isEditing ? '✏️' : '➕'}
+                </Text>
+              </View>
               <View style={styles.headerText}>
                 <Title style={styles.title}>
                   {isEditing ? 'Edit Item' : 'Add New Item'}
@@ -259,7 +239,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
                 mode="outlined"
                 style={[styles.input, globalFormStyles.hideValidationIndicators]}
                 error={!!errors.productName}
-                left={<TextInput.Icon  />}
+                left={<TextInput.Icon icon="package-variant" />}
                 outlineColor={colors.borderLight}
                 activeOutlineColor={colors.primary}
                 autoComplete="off"
@@ -280,7 +260,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
                 style={[styles.input, globalFormStyles.hideValidationIndicators]}
                 keyboardType="numeric"
                 error={!!errors.barcode}
-                left={<TextInput.Icon  />}
+                left={<TextInput.Icon icon="barcode" />}
                 outlineColor={colors.borderLight}
                 activeOutlineColor={colors.primary}
                 autoComplete="off"
@@ -289,7 +269,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
                 spellCheck={false}
                 right={
                   <TextInput.Icon 
-                     
+                    icon="barcode-scan"
                     onPress={() => navigation.navigate('Scanner', { returnScreen: 'ItemDetail' })}
                   />
                 }
@@ -339,7 +319,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
                     mode="outlined"
                     keyboardType="numeric"
                     error={!!errors.minStockLevel}
-                    left={<TextInput.Icon  />}
+                    left={<TextInput.Icon icon="alert-outline" />}
                     outlineColor={colors.borderLight}
                     activeOutlineColor={colors.primary}
                     autoComplete="off"
@@ -360,21 +340,17 @@ const ItemDetailScreen = ({ navigation, route }) => {
               <Title style={styles.sectionTitle}>Location & Expiry</Title>
               <Divider style={styles.sectionDivider} />
               
-              <CustomTextInput
-                label="Storage Location (Optional)"
-                value={formData.location}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, location: text }))}
-                mode="outlined"
-                style={[styles.input, globalFormStyles.hideValidationIndicators]}
-                placeholder="e.g., Cabinet A, Drawer 2, Shelf B"
-                left={<TextInput.Icon  />}
-                outlineColor={colors.borderLight}
-                activeOutlineColor={colors.primary}
-                autoComplete="off"
-                textContentType="none"
-                autoCorrect={false}
-                spellCheck={false}
-                right={null}
+              <LocationPicker
+                value={formData.locationId}
+                onSelect={(locationId, locationName) => 
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    locationId, 
+                    locationName 
+                  }))
+                }
+                placeholder="Select storage location (optional)"
+                style={styles.input}
               />
 
               <CustomTextInput
@@ -438,12 +414,9 @@ const ItemDetailScreen = ({ navigation, route }) => {
               <TouchableOpacity onPress={showDatePicker}>
                 <Surface style={styles.datePickerSurface}>
                   <View style={styles.datePickerContent}>
-                    <TouchableOpacity
-                      
-                      size={24}
-                      
-                      style={styles.dateIcon}
-                    />
+                    <View style={styles.dateIcon}>
+                      <Text style={styles.dateIconText}>📅</Text>
+                    </View>
                     <View style={styles.dateTextContainer}>
                       <Paragraph style={styles.dateLabel}>Expiry Date (Optional)</Paragraph>
                       <Title style={[
@@ -454,10 +427,11 @@ const ItemDetailScreen = ({ navigation, route }) => {
                       </Title>
                     </View>
                     <TouchableOpacity
-                      
-                      size={20}
-                      
-                    />
+                      onPress={() => setFormData(prev => ({ ...prev, expiryDate: null }))}
+                      style={styles.clearDateButton}
+                    >
+                      <Text style={styles.clearDateText}>✕</Text>
+                    </TouchableOpacity>
                   </View>
                 </Surface>
               </TouchableOpacity>
@@ -529,9 +503,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   headerIcon: {
-    margin: 0,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     marginRight: spacing.md,
     backgroundColor: colors.primaryLight + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerIconText: {
+    fontSize: 20,
   },
   headerText: {
     flex: 1,
@@ -603,8 +584,26 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   dateIcon: {
-    margin: 0,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: spacing.sm,
+  },
+  dateIconText: {
+    fontSize: 18,
+  },
+  clearDateButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.gray + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearDateText: {
+    fontSize: 12,
+    color: colors.gray,
   },
   dateTextContainer: {
     flex: 1,
@@ -689,8 +688,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   buttonContent: {
-    height: components.button.height,
-    paddingHorizontal: spacing.lg,
+    height: 48,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   currencyIcon: {
     fontSize: typography.fontSize.lg,

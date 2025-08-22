@@ -159,6 +159,27 @@ export const components = {
     height: 48,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.lg,
+    minWidth: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  buttonCompact: {
+    height: 40,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    minWidth: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  buttonLarge: {
+    height: 56,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.xl,
+    minWidth: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   
   input: {

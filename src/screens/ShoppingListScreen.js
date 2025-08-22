@@ -1217,11 +1217,12 @@ const styles = StyleSheet.create({
   },
   summaryButtonsContainer: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
     marginTop: 8,
   },
   summaryButton: {
     flex: 1,
+    minWidth: 80,
   },
   shareButton: {
     // Styles handled by summaryButton
@@ -1292,11 +1293,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 4,
     marginBottom: 8,
-    minWidth: 120,
+    minWidth: 130,
   },
   quantityButtonContent: {
-    height: 52,
-    paddingHorizontal: 20,
+    height: 56,
+    paddingHorizontal: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1304,7 +1305,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginHorizontal: 0,
     fontWeight: '500',
-    lineHeight: 22,
+    lineHeight: 24,
+    textAlign: 'center',
   },
   editButton: {
     borderColor: colors.secondary || '#666',
@@ -1494,7 +1496,7 @@ const styles = StyleSheet.create({
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 16,
     marginTop: 32,
     paddingTop: 20,
     borderTopWidth: 1,
@@ -1502,9 +1504,11 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
+    minWidth: 100,
   },
   addButton: {
     flex: 1,
+    minWidth: 100,
   },
   closeButton: {
     marginTop: 16,

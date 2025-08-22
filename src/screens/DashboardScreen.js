@@ -416,10 +416,13 @@ const styles = StyleSheet.create({
   actionButton: {
     borderRadius: borderRadius.lg,
     marginBottom: spacing.sm,
+    minWidth: 120,
   },
   actionButtonContent: {
-    height: components.button.height,
-    paddingHorizontal: spacing.lg,
+    height: 48,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   alertCard: {
     marginBottom: spacing.xl,
@@ -465,8 +468,10 @@ const styles = StyleSheet.create({
     borderColor: colors.danger,
   },
   logoutButtonContent: {
-    height: components.button.height,
-    paddingHorizontal: spacing.lg,
+    height: 48,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   // Emoji icon styles
   headerIcon: {

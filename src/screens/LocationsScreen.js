@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginRight: spacing.sm,
     alignItems: 'center',
-    minWidth: 80,
+    minWidth: 100,
   },
   selectedTypeChip: {
     backgroundColor: colors.primaryLight + '30',
