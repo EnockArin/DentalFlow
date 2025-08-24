@@ -3,16 +3,30 @@ import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/aut
 import { getFirestore } from 'firebase/firestore';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your Firebase configuration
-// Replace with your actual Firebase project config
+// Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyChxAIKlop8YGTb2-5qTMuc1mPhNGXyKHY",
-  authDomain: "dentalflow-15562.firebaseapp.com",
-  projectId: "dentalflow-15562",
-  storageBucket: "dentalflow-15562.firebasestorage.app",
-  messagingSenderId: "580198105709",
-  appId: "1:580198105709:android:b12959eaf662013bf23564"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
+
+// Validate that all required environment variables are present
+const requiredEnvVars = [
+  'EXPO_PUBLIC_FIREBASE_API_KEY',
+  'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN',
+  'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
+  'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
+  'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+  'EXPO_PUBLIC_FIREBASE_APP_ID'
+];
+
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+if (missingEnvVars.length > 0) {
+  throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

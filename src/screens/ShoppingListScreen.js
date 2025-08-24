@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { View, FlatList, StyleSheet, Share, Alert, Modal, TouchableOpacity, ScrollView } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   List, 
   Text, 
@@ -19,6 +18,7 @@ import {
 import CustomTextInput from '../components/common/CustomTextInput';
 import { useSelector } from 'react-redux';
 import { colors } from '../constants/theme';
+import { getShoppingLists, setShoppingLists, migrateToSecureStorage, SECURE_STORAGE_KEYS } from '../utils/secureStorage';
 
 const ShoppingListScreen = ({ navigation }) => {
   const { items, loading } = useSelector((state) => state.inventory);
@@ -26,7 +26,6 @@ const ShoppingListScreen = ({ navigation }) => {
   // Shopping list states
   const [manualItems, setManualItems] = useState([]); // Manually added items
   const [addItemModalVisible, setAddItemModalVisible] = useState(false);
-  const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
   const [addItemOptionsVisible, setAddItemOptionsVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [newItemName, setNewItemName] = useState('');
@@ -44,6 +43,11 @@ const ShoppingListScreen = ({ navigation }) => {
   const [editingItem, setEditingItem] = useState(null);
   const [editQuantity, setEditQuantity] = useState('');
   const [customQuantities, setCustomQuantities] = useState({}); // Store custom quantities for low stock items
+  
+  // Multi-item addition states
+  const [multiItemModalVisible, setMultiItemModalVisible] = useState(false);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [multiItemQuantities, setMultiItemQuantities] = useState({});
   
   // Filter items where current quantity is at or below minimum stock level
   const lowStockItems = items.filter(item => 
@@ -98,52 +102,76 @@ const ShoppingListScreen = ({ navigation }) => {
     setSearchQuery('');
   };
 
+  // Multi-item addition functions
+  const toggleItemSelection = (item) => {
+    setSelectedItems(prev => {
+      const isSelected = prev.some(selected => selected.id === item.id);
+      if (isSelected) {
+        // Remove item
+        const newQuantities = { ...multiItemQuantities };
+        delete newQuantities[item.id];
+        setMultiItemQuantities(newQuantities);
+        return prev.filter(selected => selected.id !== item.id);
+      } else {
+        // Add item
+        setMultiItemQuantities(prev => ({
+          ...prev,
+          [item.id]: '1'
+        }));
+        return [...prev, item];
+      }
+    });
+  };
+
+  const updateItemQuantity = (itemId, quantity) => {
+    setMultiItemQuantities(prev => ({
+      ...prev,
+      [itemId]: quantity
+    }));
+  };
+
+  const addMultipleItemsToList = () => {
+    if (selectedItems.length === 0) {
+      Alert.alert('No Items Selected', 'Please select at least one item to add.');
+      return;
+    }
+
+    const newItems = selectedItems.map(item => ({
+      id: `manual_${Date.now()}_${item.id}`,
+      productName: item.productName,
+      quantity: parseInt(multiItemQuantities[item.id]) || 1,
+      notes: `From inventory: ${item.description || 'No description'}`,
+      type: 'manual',
+      dateAdded: new Date().toISOString(),
+      originalItem: item
+    }));
+
+    setManualItems(prev => [...prev, ...newItems]);
+    setSelectedItems([]);
+    setMultiItemQuantities({});
+    setMultiItemModalVisible(false);
+    
+    Alert.alert('Success', `Added ${newItems.length} items to your shopping list.`);
+  };
+
+  const resetMultiItemModal = () => {
+    setSelectedItems([]);
+    setMultiItemQuantities({});
+    setSearchQuery('');
+  };
+
+  const handleCancelMultiItem = () => {
+    resetMultiItemModal();
+    setMultiItemModalVisible(false);
+  };
+
   const handleCancelAddItem = () => {
     resetModalForms();
     setAddItemModalVisible(false);
   };
 
-  const handleCancelInventoryModal = () => {
-    resetModalForms();
-    setInventoryModalVisible(false);
-  };
-
   const removeManualItem = (itemId) => {
     setManualItems(prev => prev.filter(item => item.id !== itemId));
-  };
-
-  const addInventoryItemToList = (inventoryItem) => {
-    // Check if already in manual list
-    const existingManual = manualItems.find(item => 
-      item.inventoryId === inventoryItem.id
-    );
-    
-    if (existingManual) {
-      Alert.alert('Already Added', 'This item is already in your shopping list.');
-      return;
-    }
-
-    // Check if already in low stock list
-    const isLowStock = lowStockItems.some(item => item.id === inventoryItem.id);
-    if (isLowStock) {
-      Alert.alert('Already Included', 'This item is already included due to low stock.');
-      return;
-    }
-
-    const manualItem = {
-      id: `manual_inv_${Date.now()}`,
-      productName: inventoryItem.productName,
-      quantity: 1,
-      notes: 'Added manually',
-      type: 'manual',
-      inventoryId: inventoryItem.id,
-      barcode: inventoryItem.barcode,
-      location: inventoryItem.location,
-      dateAdded: new Date().toISOString()
-    };
-
-    setManualItems(prev => [...prev, manualItem]);
-    setInventoryModalVisible(false);
   };
 
   const generateShoppingListText = () => {
@@ -257,12 +285,16 @@ const ShoppingListScreen = ({ navigation }) => {
   // Saved shopping lists functions
   const loadSavedLists = async () => {
     try {
-      const saved = await AsyncStorage.getItem('savedShoppingLists');
-      if (saved) {
-        setSavedLists(JSON.parse(saved));
-      }
+      // First, attempt migration from AsyncStorage to SecureStore
+      await migrateToSecureStorage('savedShoppingLists', SECURE_STORAGE_KEYS.SHOPPING_LISTS);
+      
+      // Load from SecureStore
+      const saved = await getShoppingLists();
+      setSavedLists(saved);
     } catch (error) {
       console.error('Error loading saved lists:', error);
+      // Fallback to empty array on error
+      setSavedLists([]);
     }
   };
 
@@ -292,7 +324,7 @@ const ShoppingListScreen = ({ navigation }) => {
       };
 
       const updatedLists = [...savedLists, newSavedList];
-      await AsyncStorage.setItem('savedShoppingLists', JSON.stringify(updatedLists));
+      await setShoppingLists(updatedLists);
       setSavedLists(updatedLists);
       setListName('');
       setSaveListModalVisible(false);
@@ -328,7 +360,7 @@ const ShoppingListScreen = ({ navigation }) => {
   const deleteSavedList = async (listId) => {
     try {
       const updatedLists = savedLists.filter(list => list.id !== listId);
-      await AsyncStorage.setItem('savedShoppingLists', JSON.stringify(updatedLists));
+      await setShoppingLists(updatedLists);
       setSavedLists(updatedLists);
       Alert.alert('Success', 'Shopping list deleted');
     } catch (error) {
@@ -351,7 +383,7 @@ const ShoppingListScreen = ({ navigation }) => {
     setQuantityEditModalVisible(true);
   };
 
-  const updateItemQuantity = () => {
+  const updateSingleItemQuantity = () => {
     if (!editQuantity.trim() || isNaN(parseInt(editQuantity)) || parseInt(editQuantity) <= 0) {
       Alert.alert('Invalid Quantity', 'Please enter a valid positive number');
       return;
@@ -653,18 +685,6 @@ const ShoppingListScreen = ({ navigation }) => {
           />
         </View>
         
-        <View style={styles.fabWithLabel}>
-          <View style={styles.fabLabelContainer}>
-            <Text style={styles.fabLabel}>Add from Inventory</Text>
-          </View>
-          <FAB
-            style={[styles.fabInventory, { backgroundColor: colors.secondary }]}
-            icon={() => <Text style={styles.fabIcon}>📦</Text>}
-            onPress={() => setInventoryModalVisible(true)}
-            color={colors.white}
-            size="small"
-          />
-        </View>
       </View>
 
       {/* Add Manual Item Modal */}
@@ -761,89 +781,6 @@ const ShoppingListScreen = ({ navigation }) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* Add from Inventory Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={inventoryModalVisible}
-        onRequestClose={handleCancelInventoryModal}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={handleCancelInventoryModal}
-        >
-          <TouchableOpacity 
-            activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Surface style={styles.modalSurface}>
-              <ScrollView 
-                style={styles.modalScrollView}
-                contentContainerStyle={styles.inventoryModalScrollContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
-                <View style={styles.inventoryModalContent}>
-                  <View style={styles.modalHeader}>
-                    <Title style={styles.modalTitle}>Add from Inventory</Title>
-                    <Paragraph style={styles.modalSubtitle}>
-                      Select existing inventory items to add to your shopping list. These items will show current stock levels and locations.
-                    </Paragraph>
-                  </View>
-
-                  <Searchbar
-                    placeholder="Search by item name, location, or barcode..."
-                    onChangeText={setSearchQuery}
-                    value={searchQuery}
-                    style={styles.searchbar}
-                  />
-                  
-                  <View style={styles.inventoryHeader}>
-                    <Text style={styles.inventoryHeaderText}>
-                      {items.filter(item => 
-                        item.productName.toLowerCase().includes(searchQuery.toLowerCase())
-                      ).length} items available
-                    </Text>
-                  </View>
-
-                  {items.filter(item => 
-                    item.productName.toLowerCase().includes(searchQuery.toLowerCase())
-                  ).map((item) => (
-                    <TouchableOpacity 
-                      key={item.id}
-                      style={styles.inventoryItem}
-                      onPress={() => addInventoryItemToList(item)}
-                    >
-                      <View style={styles.inventoryItemContent}>
-                        <Text style={styles.inventoryItemName}>{item.productName}</Text>
-                        <Text style={styles.inventoryItemStock}>Stock: {item.currentQuantity}</Text>
-                        {item.location && (
-                          <Text style={styles.inventoryItemLocation}>{item.location}</Text>
-                        )}
-                        {item.barcode && (
-                          <Text style={styles.inventoryItemBarcode}>Barcode: {item.barcode}</Text>
-                        )}
-                      </View>
-                      <Text style={styles.inventoryItemChevron}>›</Text>
-                    </TouchableOpacity>
-                  ))}
-
-                  <View style={styles.modalFooter}>
-                    <Button
-                      mode="outlined"
-                      onPress={handleCancelInventoryModal}
-                      style={styles.closeButton}
-                    >
-                      Close
-                    </Button>
-                  </View>
-                </View>
-              </ScrollView>
-            </Surface>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Add Item Options Modal */}
       <Modal
@@ -906,6 +843,26 @@ const ShoppingListScreen = ({ navigation }) => {
                       <Title style={styles.optionTitle}>Manual Entry</Title>
                       <Paragraph style={styles.optionDescription}>
                         Manually enter custom item details for shopping list
+                      </Paragraph>
+                    </View>
+                    <Text style={styles.optionChevron}>›</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.addItemOption}
+                    onPress={() => {
+                      setAddItemOptionsVisible(false);
+                      setMultiItemModalVisible(true);
+                      resetMultiItemModal();
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Text style={styles.optionIcon}>📦</Text>
+                    </View>
+                    <View style={styles.optionContent}>
+                      <Title style={styles.optionTitle}>Add Multiple Items</Title>
+                      <Paragraph style={styles.optionDescription}>
+                        Select multiple items from inventory to add at once
                       </Paragraph>
                     </View>
                     <Text style={styles.optionChevron}>›</Text>
@@ -1155,7 +1112,7 @@ const ShoppingListScreen = ({ navigation }) => {
                   </Button>
                   <Button
                     mode="contained"
-                    onPress={updateItemQuantity}
+                    onPress={updateSingleItemQuantity}
                     style={styles.addButton}
                   >
                     Update
@@ -1165,6 +1122,133 @@ const ShoppingListScreen = ({ navigation }) => {
             </Surface>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Multi-Item Selection Modal */}
+      <Modal
+        visible={multiItemModalVisible}
+        onRequestClose={handleCancelMultiItem}
+        animationType="slide"
+      >
+        <View style={styles.multiItemModalContainer}>
+          {/* Header */}
+          <View style={styles.multiItemModalHeader}>
+            <View style={styles.multiItemModalTitleContainer}>
+              <Title style={styles.multiItemModalTitle}>Add Multiple Items</Title>
+              <Text style={styles.multiItemModalSubtitle}>
+                Select items to add to your shopping list
+              </Text>
+            </View>
+          </View>
+
+          {/* Search Bar */}
+          <Searchbar
+            placeholder="Search inventory items..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchBar}
+          />
+
+          {/* Selected Items Summary */}
+          {selectedItems.length > 0 && (
+            <View style={styles.selectedItemsSummary}>
+              <Text style={styles.selectedItemsText}>
+                {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
+              </Text>
+              <Button
+                mode="text"
+                onPress={() => {
+                  setSelectedItems([]);
+                  setMultiItemQuantities({});
+                }}
+                textColor={colors.textSecondary}
+              >
+                Clear All
+              </Button>
+            </View>
+          )}
+
+          {/* Items List */}
+          <FlatList
+            data={items.filter(item =>
+              item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+            )}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
+              const isSelected = selectedItems.some(selected => selected.id === item.id);
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.multiItemSelectionItem,
+                    isSelected && styles.selectedMultiItem
+                  ]}
+                  onPress={() => toggleItemSelection(item)}
+                >
+                  <View style={styles.multiItemContent}>
+                    <View style={styles.multiItemInfo}>
+                      <Text style={styles.multiItemName}>{item.productName}</Text>
+                      <Text style={styles.multiItemDescription}>
+                        {item.description || 'No description'}
+                      </Text>
+                      <Text style={styles.multiItemStock}>
+                        Stock: {item.currentQuantity}
+                      </Text>
+                    </View>
+                    
+                    {isSelected && (
+                      <View style={styles.quantityInputContainer}>
+                        <Text style={styles.quantityLabel}>Qty:</Text>
+                        <CustomTextInput
+                          value={multiItemQuantities[item.id] || '1'}
+                          onChangeText={(value) => updateItemQuantity(item.id, value)}
+                          keyboardType="numeric"
+                          style={styles.quantityInput}
+                          autoComplete="off"
+                          textContentType="none"
+                          autoCorrect={false}
+                          spellCheck={false}
+                        />
+                      </View>
+                    )}
+                    
+                    <View style={[
+                      styles.selectionIndicator,
+                      isSelected && styles.selectedIndicator
+                    ]}>
+                      {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+            style={styles.multiItemsList}
+            showsVerticalScrollIndicator={false}
+          />
+
+          {/* Action Buttons */}
+          <View style={styles.multiItemModalActions}>
+            {selectedItems.length > 0 && (
+              <Button
+                mode="contained"
+                onPress={addMultipleItemsToList}
+                style={styles.addMultiItemsButton}
+              >
+                Add {selectedItems.length} Item{selectedItems.length !== 1 ? 's' : ''} to List
+              </Button>
+            )}
+            
+            <Button
+              mode="outlined"
+              onPress={handleCancelMultiItem}
+              style={styles.cancelButtonCentered}
+              textColor={colors.danger}
+              buttonColor="transparent"
+            >
+              Cancel
+            </Button>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1401,17 +1485,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
-  fabInventory: {
-    borderRadius: 24,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
   fabIcon: {
     fontSize: 24,
     color: 'white',
@@ -1454,14 +1527,6 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     minHeight: 400,
-  },
-  inventoryModalContent: {
-    minHeight: 400,
-  },
-  inventoryModalScrollContent: {
-    padding: 20,
-    paddingBottom: 30,
-    flexGrow: 1,
   },
   modalHeader: {
     marginBottom: 16,
@@ -1517,66 +1582,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: 'white',
     elevation: 0,
-  },
-  inventoryHeader: {
-    paddingHorizontal: 4,
-    marginBottom: 12,
-  },
-  inventoryHeaderText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  inventoryList: {
-    marginBottom: 16,
-    minHeight: 350,
-    maxHeight: 600,
-    flex: 1,
-  },
-  inventoryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  inventoryItemContent: {
-    flex: 1,
-  },
-  inventoryItemName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  inventoryItemStock: {
-    fontSize: 14,
-    color: '#666',
-  },
-  inventoryItemLocation: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 2,
-  },
-  inventoryItemChevron: {
-    fontSize: 20,
-    color: '#666',
-  },
-  inventoryItemBarcode: {
-    fontSize: 11,
-    color: '#888',
-    fontFamily: 'monospace',
-    marginTop: 2,
   },
   // Add Item Options Modal Styles
   addItemOptionsContainer: {
@@ -1725,6 +1730,138 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
+  },
+  // Multi-Item Selection Modal Styles
+  multiItemModalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  multiItemModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    backgroundColor: colors.surface,
+  },
+  multiItemModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+  },
+  selectedItemsSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.primaryLight + '20',
+  },
+  selectedItemsText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  multiItemsList: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  multiItemSelectionItem: {
+    backgroundColor: colors.surface,
+    marginVertical: 4,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  selectedMultiItem: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight + '10',
+  },
+  multiItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  multiItemInfo: {
+    flex: 1,
+  },
+  multiItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  multiItemDescription: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  multiItemStock: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  quantityInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  quantityLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginRight: 8,
+  },
+  quantityInput: {
+    width: 60,
+    height: 40,
+  },
+  selectionIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedIndicator: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  checkmark: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  multiItemModalActions: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    gap: 12,
+  },
+  addMultiItemsButton: {
+    alignSelf: 'stretch',
+    borderRadius: 8,
+  },
+  cancelButtonCentered: {
+    borderRadius: 8,
+    borderColor: colors.danger,
+    minWidth: 120,
+  },
+  multiItemModalTitleContainer: {
+    flex: 1,
+  },
+  multiItemModalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  disabledButton: {
+    backgroundColor: colors.disabled,
   },
 });
 

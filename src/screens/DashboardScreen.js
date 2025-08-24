@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Animated, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Animated, Text, TouchableOpacity, Modal } from 'react-native';
 import { Card, Title, Paragraph, Button, Divider } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
 import { signOut } from 'firebase/auth';
@@ -15,6 +15,10 @@ const DashboardScreen = ({ navigation }) => {
   
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
+  const [showMenu, setShowMenu] = useState(false);
+  const [selectedLocationId, setSelectedLocationId] = useState('all');
+  const [showLocationMenu, setShowLocationMenu] = useState(false);
+  const [showCheckInOutModal, setShowCheckInOutModal] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -40,13 +44,29 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
-  const expiringItems = items.filter(item => {
+  // Filter items based on selected location
+  const filteredItems = selectedLocationId === 'all' 
+    ? items 
+    : items.filter(item => item.locationId === selectedLocationId);
+
+  const filteredLowStockItems = selectedLocationId === 'all'
+    ? lowStockItems
+    : lowStockItems.filter(item => item.locationId === selectedLocationId);
+
+  const expiringItems = filteredItems.filter(item => {
     if (!item.expiryDate) return false;
     const daysUntilExpiry = Math.ceil(
       (item.expiryDate - new Date()) / (1000 * 60 * 60 * 24)
     );
     return daysUntilExpiry <= 30 && daysUntilExpiry > 0;
   });
+
+  // Get selected location name
+  const getSelectedLocationName = () => {
+    if (selectedLocationId === 'all') return 'All Locations';
+    const location = locations.find(loc => loc.id === selectedLocationId);
+    return location ? location.name : 'All Locations';
+  };
 
   // Location-specific analytics
   const getLocationStats = (locationId) => {
@@ -74,43 +94,48 @@ const DashboardScreen = ({ navigation }) => {
 
   const quickActions = [
     {
-      title: 'Treatment Kits',
-      action: () => navigation.navigate('TreatmentKits'),
-      mode: 'contained',
-      color: colors.primary,
-      icon: '🏥',
-    },
-    {
-      title: 'Locations',
-      action: () => navigation.navigate('Locations'),
-      mode: 'contained',
-      color: colors.secondary,
-      icon: '🏢',
-    },
-    {
       title: 'Scan Barcode',
       action: () => navigation.navigate('Scanner'),
       mode: 'contained',
       color: colors.info,
     },
     {
-      title: 'Manual Add Item',
-      action: () => navigation.navigate('ItemDetail'),
+      title: 'Manual Check In/Out',
+      action: () => setShowCheckInOutModal(true),
       mode: 'contained',
-      color: colors.success,
-    },
-    {
-      title: 'Manual Checkout',
-      action: () => navigation.navigate('Checkout'),
-      mode: 'contained',
-      color: colors.danger,
-    },
-    {
-      title: `Shopping List (${lowStockItems.length})`,
-      action: () => navigation.navigate('ShoppingList'),
-      mode: 'outlined',
       color: colors.secondary,
-      badge: lowStockItems.length > 0,
+    },
+  ];
+
+  const menuItems = [
+    {
+      title: 'Settings',
+      action: () => {
+        setShowMenu(false);
+        navigation.navigate('Settings');
+      },
+    },
+    {
+      title: 'Treatment Kits',
+      action: () => {
+        setShowMenu(false);
+        navigation.navigate('TreatmentKits');
+      },
+    },
+    {
+      title: 'Locations',
+      action: () => {
+        setShowMenu(false);
+        navigation.navigate('Locations');
+      },
+    },
+    {
+      title: `Shopping List ${filteredLowStockItems.length > 0 ? `(${filteredLowStockItems.length})` : ''}`,
+      action: () => {
+        setShowMenu(false);
+        navigation.navigate('ShoppingList');
+      },
+      badge: filteredLowStockItems.length > 0,
     },
   ];
 
@@ -121,12 +146,24 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.userInfo}>
-              <Title style={styles.welcomeTitle}>Welcome back! 👋</Title>
+              <Title style={styles.welcomeTitle}>Welcome back!</Title>
               <Paragraph style={styles.userEmail}>{user?.email}</Paragraph>
             </View>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.settingsButton}>
-            <Text style={styles.headerIcon}>⚙️</Text>
+          <TouchableOpacity onPress={() => setShowMenu(true)} style={styles.settingsButton}>
+            <Text style={styles.headerIcon}>☰</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Location Filter */}
+        <View style={styles.locationFilterContainer}>
+          <Text style={styles.locationFilterLabel}>View inventory for:</Text>
+          <TouchableOpacity
+            style={styles.locationDropdown}
+            onPress={() => setShowLocationMenu(true)}
+          >
+            <Text style={styles.locationDropdownText}>{getSelectedLocationName()}</Text>
+            <Text style={styles.dropdownArrow}>▼</Text>
           </TouchableOpacity>
         </View>
 
@@ -139,11 +176,8 @@ const DashboardScreen = ({ navigation }) => {
           >
             <Card style={[styles.statCard, styles.totalItemsCard]}>
               <Card.Content style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Text style={styles.statIcon}>📦</Text>
-                </View>
                 <Title style={[styles.statNumber, { color: colors.primary }]}>
-                  {items.length}
+                  {filteredItems.length}
                 </Title>
                 <Paragraph style={styles.statLabel}>View Inventory</Paragraph>
               </Card.Content>
@@ -157,11 +191,8 @@ const DashboardScreen = ({ navigation }) => {
           >
             <Card style={[styles.statCard, styles.lowStockCard]}>
               <Card.Content style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Text style={styles.statIcon}>⚠️</Text>
-                </View>
                 <Title style={[styles.statNumber, { color: colors.warning }]}>
-                  {lowStockItems.length}
+                  {filteredLowStockItems.length}
                 </Title>
                 <Paragraph style={styles.statLabel}>Low Stock</Paragraph>
               </Card.Content>
@@ -175,9 +206,6 @@ const DashboardScreen = ({ navigation }) => {
           >
             <Card style={[styles.statCard, styles.expiringCard]}>
               <Card.Content style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Text style={styles.statIcon}>⏰</Text>
-                </View>
                 <Title style={[styles.statNumber, { color: colors.danger }]}>
                   {expiringItems.length}
                 </Title>
@@ -192,7 +220,6 @@ const DashboardScreen = ({ navigation }) => {
           <Card.Content style={styles.actionContent}>
             <View style={styles.actionHeader}>
               <Title style={styles.actionTitle}>Quick Actions</Title>
-              <Text style={styles.quickActionIcon}>⚡</Text>
             </View>
             
             <View style={styles.actionGrid}>
@@ -221,7 +248,6 @@ const DashboardScreen = ({ navigation }) => {
           <Card style={styles.alertCard}>
             <Card.Content style={styles.alertContent}>
               <View style={styles.alertHeader}>
-                <Text style={styles.alertIcon}>🕐</Text>
                 <View style={styles.alertText}>
                   <Title style={styles.alertTitle}>Expiring Soon</Title>
                   <Paragraph style={styles.alertDescription}>
@@ -246,7 +272,6 @@ const DashboardScreen = ({ navigation }) => {
           <Card style={styles.locationAlertsCard}>
             <Card.Content style={styles.locationAlertsContent}>
               <View style={styles.locationAlertsHeader}>
-                <Text style={styles.locationAlertsIcon}>📍</Text>
                 <View style={styles.locationAlertsText}>
                   <Title style={styles.locationAlertsTitle}>Low Stock by Location</Title>
                   <Paragraph style={styles.locationAlertsDescription}>
@@ -301,6 +326,164 @@ const DashboardScreen = ({ navigation }) => {
           Logout
         </Button>
       </Animated.View>
+
+      {/* Dropdown Menu Modal */}
+      <Modal
+        visible={showMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMenu(false)}
+        >
+          <View style={styles.menuContainer}>
+            <View style={styles.menuContent}>
+              {menuItems.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.menuItem,
+                    index === menuItems.length - 1 && styles.lastMenuItem
+                  ]}
+                  onPress={item.action}
+                >
+                  <Text style={styles.menuText}>{item.title}</Text>
+                  {item.badge && (
+                    <View style={styles.menuBadge}>
+                      <Text style={styles.menuBadgeText}>!</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Location Filter Modal */}
+      <Modal
+        visible={showLocationMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLocationMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLocationMenu(false)}
+        >
+          <View style={styles.locationMenuContainer}>
+            <View style={styles.locationMenuContent}>
+              <TouchableOpacity
+                style={[
+                  styles.locationMenuItem,
+                  selectedLocationId === 'all' && styles.selectedLocationItem
+                ]}
+                onPress={() => {
+                  setSelectedLocationId('all');
+                  setShowLocationMenu(false);
+                }}
+              >
+                <Text style={[
+                  styles.locationMenuText,
+                  selectedLocationId === 'all' && styles.selectedLocationText
+                ]}>All Locations</Text>
+                {selectedLocationId === 'all' && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </TouchableOpacity>
+              {locations.map((location) => (
+                <TouchableOpacity
+                  key={location.id}
+                  style={[
+                    styles.locationMenuItem,
+                    selectedLocationId === location.id && styles.selectedLocationItem,
+                    location.id === locations[locations.length - 1].id && styles.lastLocationMenuItem
+                  ]}
+                  onPress={() => {
+                    setSelectedLocationId(location.id);
+                    setShowLocationMenu(false);
+                  }}
+                >
+                  <View style={styles.locationItemContent}>
+                    <Text style={[
+                      styles.locationMenuText,
+                      selectedLocationId === location.id && styles.selectedLocationText
+                    ]}>{location.name}</Text>
+                    <Text style={styles.locationTypeText}>{location.type}</Text>
+                  </View>
+                  {selectedLocationId === location.id && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Check In/Out Options Modal */}
+      <Modal
+        visible={showCheckInOutModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCheckInOutModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCheckInOutModal(false)}
+        >
+          <View style={styles.checkInOutModalContainer}>
+            <View style={styles.checkInOutModalContent}>
+              <Title style={styles.checkInOutModalTitle}>Manual Inventory Management</Title>
+              <Paragraph style={styles.checkInOutModalSubtitle}>
+                Choose an option to manage your inventory
+              </Paragraph>
+              
+              <View style={styles.checkInOutOptions}>
+                <TouchableOpacity
+                  style={[styles.checkInOutOption, styles.checkInOption]}
+                  onPress={() => {
+                    setShowCheckInOutModal(false);
+                    navigation.navigate('ItemDetail');
+                  }}
+                >
+                  <Title style={styles.checkInOutOptionTitle}>Check In Item</Title>
+                  <Paragraph style={styles.checkInOutOptionDescription}>
+                    Add new item to inventory or increase stock
+                  </Paragraph>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.checkInOutOption, styles.checkOutOption]}
+                  onPress={() => {
+                    setShowCheckInOutModal(false);
+                    navigation.navigate('Checkout');
+                  }}
+                >
+                  <Title style={styles.checkInOutOptionTitle}>Check Out Item</Title>
+                  <Paragraph style={styles.checkInOutOptionDescription}>
+                    Remove item from inventory or reduce stock
+                  </Paragraph>
+                </TouchableOpacity>
+              </View>
+              
+              <Button
+                mode="outlined"
+                onPress={() => setShowCheckInOutModal(false)}
+                style={styles.checkInOutModalCancelButton}
+                textColor={colors.textSecondary}
+              >
+                Cancel
+              </Button>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 };
@@ -352,6 +535,8 @@ const styles = StyleSheet.create({
   statCard: {
     borderRadius: borderRadius.lg,
     ...shadows.medium,
+    height: 120,
+    justifyContent: 'center',
   },
   totalItemsCard: {
     backgroundColor: colors.primaryLight + '10',
@@ -370,14 +555,9 @@ const styles = StyleSheet.create({
   },
   statContent: {
     alignItems: 'center',
-    padding: spacing.lg,
-  },
-  statIconContainer: {
-    marginBottom: spacing.sm,
-  },
-  statIcon: {
-    margin: 0,
-    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    padding: spacing.md,
+    height: '100%',
   },
   statNumber: {
     fontSize: typography.fontSize.xxxl,
@@ -389,6 +569,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: typography.fontWeight.medium,
     textAlign: 'center',
+    numberOfLines: 2,
+    flexWrap: 'wrap',
   },
   actionCard: {
     marginBottom: spacing.xl,
@@ -475,19 +657,7 @@ const styles = StyleSheet.create({
   },
   // Emoji icon styles
   headerIcon: {
-    fontSize: 20,
-    textAlign: 'center',
-  },
-  statIcon: {
-    fontSize: 24,
-    textAlign: 'center',
-  },
-  quickActionIcon: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  alertIcon: {
-    fontSize: 20,
+    fontSize: 26,
     textAlign: 'center',
   },
   // Location Alerts Styles
@@ -572,6 +742,202 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: typography.fontWeight.bold,
     color: colors.white,
+  },
+  // Menu Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 80,
+    paddingRight: spacing.md,
+  },
+  menuContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    ...shadows.large,
+    minWidth: 200,
+  },
+  menuContent: {
+    paddingVertical: spacing.sm,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  lastMenuItem: {
+    borderBottomWidth: 0,
+  },
+  menuText: {
+    fontSize: typography.fontSize.md,
+    color: colors.textPrimary,
+    fontWeight: typography.fontWeight.medium,
+    flex: 1,
+  },
+  menuBadge: {
+    backgroundColor: colors.danger,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuBadgeText: {
+    fontSize: 12,
+    color: colors.white,
+    fontWeight: typography.fontWeight.bold,
+  },
+  // Location Filter Styles
+  locationFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.lg,
+    borderRadius: borderRadius.lg,
+    ...shadows.small,
+  },
+  locationFilterLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.fontWeight.medium,
+  },
+  locationDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.lightGray,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    minWidth: 150,
+  },
+  locationDropdownText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
+    fontWeight: typography.fontWeight.medium,
+    flex: 1,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
+  },
+  // Location Menu Modal Styles
+  locationMenuContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    ...shadows.large,
+    minWidth: 250,
+    maxHeight: 300,
+  },
+  locationMenuContent: {
+    paddingVertical: spacing.sm,
+  },
+  locationMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  lastLocationMenuItem: {
+    borderBottomWidth: 0,
+  },
+  selectedLocationItem: {
+    backgroundColor: colors.primaryLight + '20',
+  },
+  locationItemContent: {
+    flex: 1,
+  },
+  locationMenuText: {
+    fontSize: typography.fontSize.md,
+    color: colors.textPrimary,
+    fontWeight: typography.fontWeight.medium,
+  },
+  selectedLocationText: {
+    color: colors.primary,
+    fontWeight: typography.fontWeight.bold,
+  },
+  locationTypeText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    textTransform: 'capitalize',
+  },
+  checkmark: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: typography.fontWeight.bold,
+    marginLeft: spacing.sm,
+  },
+  // Check In/Out Modal Styles
+  checkInOutModalContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    ...shadows.large,
+    minWidth: 300,
+    maxWidth: 400,
+    alignSelf: 'center',
+    marginHorizontal: spacing.lg,
+  },
+  checkInOutModalContent: {
+    padding: spacing.xxl,
+    alignItems: 'center',
+  },
+  checkInOutModalTitle: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  checkInOutModalSubtitle: {
+    fontSize: typography.fontSize.md,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  checkInOutOptions: {
+    width: '100%',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  checkInOutOption: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  checkInOption: {
+    borderColor: colors.success,
+  },
+  checkOutOption: {
+    borderColor: colors.danger,
+  },
+  checkInOutOptionTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  checkInOutOptionDescription: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  checkInOutModalCancelButton: {
+    borderColor: colors.borderLight,
+    borderRadius: borderRadius.lg,
+    width: '100%',
   },
 });
 

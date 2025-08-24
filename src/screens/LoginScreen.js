@@ -3,7 +3,7 @@ import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Animated, Text
 import { Button, Card, Title, Paragraph, TextInput } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import GradientBackground from '../components/common/GradientBackground';
@@ -78,38 +78,8 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      Alert.alert('Email Required', 'Please enter your email address first');
-      return;
-    }
-
-    try {
-      await sendPasswordResetEmail(auth, email.trim());
-      Alert.alert(
-        'Reset Email Sent',
-        'A password reset email has been sent to your email address. Please check your inbox.',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      let errorMessage = 'Failed to send reset email. Please try again.';
-      
-      switch (error.code) {
-        case 'auth/user-not-found':
-          errorMessage = 'No account found with this email address.';
-          break;
-        case 'auth/invalid-email':
-          errorMessage = 'Invalid email address.';
-          break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Too many requests. Please try again later.';
-          break;
-        default:
-          errorMessage = error.message;
-      }
-      
-      Alert.alert('Reset Error', errorMessage);
-    }
+  const handleForgotPassword = () => {
+    navigation.navigate('ForgotPassword');
   };
 
   return (

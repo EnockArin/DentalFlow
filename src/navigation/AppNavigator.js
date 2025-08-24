@@ -11,6 +11,7 @@ import { setItems, setLoading } from '../store/slices/inventorySlice';
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import InventoryListScreen from '../screens/InventoryListScreen';
 import ItemDetailScreen from '../screens/ItemDetailScreen';
@@ -101,6 +102,17 @@ const AppNavigator = () => {
               name="Register" 
               component={RegisterScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="ForgotPassword" 
+              component={ForgotPasswordScreen}
+              options={{ 
+                headerShown: true,
+                title: 'Reset Password',
+                headerStyle: { backgroundColor: '#2196F3' },
+                headerTintColor: '#fff',
+                headerTitleStyle: { fontWeight: 'bold' }
+              }}
             />
           </>
         ) : (

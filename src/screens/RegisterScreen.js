@@ -9,6 +9,7 @@ import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlic
 import GradientBackground from '../components/common/GradientBackground';
 import { colors, spacing, typography, borderRadius, shadows, components } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
+import { validateEmail, validatePassword, validateText, sanitizeInput } from '../utils/validation';
 
 const RegisterScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
@@ -46,27 +47,35 @@ const RegisterScreen = ({ navigation }) => {
     const newErrors = {};
 
     // First Name validation
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
+    const firstNameValidation = validateText(formData.firstName, { 
+      required: true, 
+      maxLength: 50, 
+      label: 'First name' 
+    });
+    if (!firstNameValidation.isValid) {
+      newErrors.firstName = firstNameValidation.message;
     }
 
     // Last Name validation
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
+    const lastNameValidation = validateText(formData.lastName, { 
+      required: true, 
+      maxLength: 50, 
+      label: 'Last name' 
+    });
+    if (!lastNameValidation.isValid) {
+      newErrors.lastName = lastNameValidation.message;
     }
 
     // Email validation
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+    const emailValidation = validateEmail(formData.email);
+    if (!emailValidation.isValid) {
+      newErrors.email = emailValidation.message;
     }
 
     // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.isValid) {
+      newErrors.password = passwordValidation.message;
     }
 
     // Confirm Password validation
@@ -88,9 +97,14 @@ const RegisterScreen = ({ navigation }) => {
     dispatch(loginStart());
     
     try {
+      // Sanitize input data before processing
+      const sanitizedEmail = sanitizeInput(formData.email.trim());
+      const sanitizedFirstName = sanitizeInput(formData.firstName.trim());
+      const sanitizedLastName = sanitizeInput(formData.lastName.trim());
+      
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
-        formData.email.trim(), 
+        sanitizedEmail, 
         formData.password
       );
       
@@ -98,7 +112,7 @@ const RegisterScreen = ({ navigation }) => {
       
       // Update user profile with display name
       await updateProfile(user, {
-        displayName: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
+        displayName: `${sanitizedFirstName} ${sanitizedLastName}`,
       });
       
       dispatch(loginSuccess({

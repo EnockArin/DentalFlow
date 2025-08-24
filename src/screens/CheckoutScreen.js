@@ -36,6 +36,11 @@ const CheckoutScreen = ({ navigation, route }) => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [checkoutQuantity, setCheckoutQuantity] = useState('1');
   const [processingCheckout, setProcessingCheckout] = useState(false);
+  
+  // Multi-item checkout states
+  const [multiCheckoutMode, setMultiCheckoutMode] = useState(false);
+  const [selectedForCheckout, setSelectedForCheckout] = useState([]);
+  const [multiCheckoutQuantities, setMultiCheckoutQuantities] = useState({});
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -114,6 +119,104 @@ const CheckoutScreen = ({ navigation, route }) => {
   // Remove item from checkout list
   const removeFromCheckout = (itemId) => {
     setCheckoutItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  // Multi-checkout functions
+  const toggleMultiCheckoutMode = () => {
+    setMultiCheckoutMode(!multiCheckoutMode);
+    if (multiCheckoutMode) {
+      setSelectedForCheckout([]);
+      setMultiCheckoutQuantities({});
+    }
+  };
+
+  const toggleItemForCheckout = (item) => {
+    setSelectedForCheckout(prev => {
+      const isSelected = prev.some(selected => selected.id === item.id);
+      if (isSelected) {
+        // Remove item
+        const newQuantities = { ...multiCheckoutQuantities };
+        delete newQuantities[item.id];
+        setMultiCheckoutQuantities(newQuantities);
+        return prev.filter(selected => selected.id !== item.id);
+      } else {
+        // Add item
+        setMultiCheckoutQuantities(prev => ({
+          ...prev,
+          [item.id]: '1'
+        }));
+        return [...prev, item];
+      }
+    });
+  };
+
+  const updateMultiCheckoutQuantity = (itemId, quantity) => {
+    setMultiCheckoutQuantities(prev => ({
+      ...prev,
+      [itemId]: quantity
+    }));
+  };
+
+  const addMultipleToCheckout = () => {
+    if (selectedForCheckout.length === 0) {
+      Alert.alert('No Items Selected', 'Please select at least one item to checkout.');
+      return;
+    }
+
+    let hasErrors = false;
+    const validItems = [];
+
+    for (const item of selectedForCheckout) {
+      const quantity = parseInt(multiCheckoutQuantities[item.id]) || 1;
+      
+      if (quantity <= 0) {
+        Alert.alert('Invalid Quantity', `Invalid quantity for ${item.productName}. Please enter a valid quantity.`);
+        hasErrors = true;
+        break;
+      }
+      
+      if (quantity > item.currentQuantity) {
+        Alert.alert('Insufficient Stock', `Only ${item.currentQuantity} items available for ${item.productName}.`);
+        hasErrors = true;
+        break;
+      }
+
+      // Check if item already exists in checkout list
+      const existingItemIndex = checkoutItems.findIndex(checkoutItem => checkoutItem.id === item.id);
+      
+      if (existingItemIndex >= 0) {
+        const totalQuantity = checkoutItems[existingItemIndex].checkoutQuantity + quantity;
+        
+        if (totalQuantity > item.currentQuantity) {
+          Alert.alert('Insufficient Stock', `Total checkout quantity would exceed available stock for ${item.productName} (${item.currentQuantity} available).`);
+          hasErrors = true;
+          break;
+        }
+        
+        // Update existing item
+        const updatedItems = [...checkoutItems];
+        updatedItems[existingItemIndex].checkoutQuantity = totalQuantity;
+        validItems.push(() => setCheckoutItems(updatedItems));
+      } else {
+        // Add new item
+        validItems.push(() => setCheckoutItems(prev => [...prev, {
+          ...item,
+          checkoutQuantity: quantity
+        }]));
+      }
+    }
+
+    if (!hasErrors) {
+      // Apply all updates
+      validItems.forEach(updateFn => updateFn());
+      
+      // Reset multi-checkout state
+      setSelectedForCheckout([]);
+      setMultiCheckoutQuantities({});
+      setMultiCheckoutMode(false);
+      
+      Alert.alert('Success', `Added ${selectedForCheckout.length} items to checkout list.`);
+    }
   };
 
   // Process checkout - update inventory quantities
@@ -196,81 +299,118 @@ const CheckoutScreen = ({ navigation, route }) => {
     </Card>
   );
 
-  const renderInventoryItem = ({ item, index }) => (
-    <Animated.View
-      style={[
-        styles.itemContainer,
-        {
-          opacity: fadeAnim,
-          transform: [{
-            translateY: fadeAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [50, 0],
-            })
-          }]
-        }
-      ]}
-    >
-      <TouchableOpacity
-        onPress={() => handleItemSelect(item)}
-        activeOpacity={0.7}
+  const renderInventoryItem = ({ item, index }) => {
+    const isSelected = multiCheckoutMode && selectedForCheckout.some(selected => selected.id === item.id);
+    
+    return (
+      <Animated.View
+        style={[
+          styles.itemContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{
+              translateY: fadeAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0],
+              })
+            }]
+          }
+        ]}
       >
-        <Card style={[styles.itemCard, item.currentQuantity === 0 && styles.outOfStockCard]}>
-          <Card.Content style={styles.cardContent}>
-            <View style={styles.itemHeader}>
-              <View style={styles.itemTitleSection}>
-                <View style={styles.titleContainer}>
-                  <Title style={styles.itemTitle} numberOfLines={1}>
-                    {item.productName}
-                  </Title>
-                  <Paragraph style={styles.itemBarcode}>
-                    {item.barcode || 'No barcode'}
-                  </Paragraph>
+        <TouchableOpacity
+          onPress={() => multiCheckoutMode ? toggleItemForCheckout(item) : handleItemSelect(item)}
+          activeOpacity={0.7}
+          disabled={item.currentQuantity === 0}
+        >
+          <Card style={[
+            styles.itemCard, 
+            item.currentQuantity === 0 && styles.outOfStockCard,
+            isSelected && styles.selectedItemCard
+          ]}>
+            <Card.Content style={styles.cardContent}>
+              {multiCheckoutMode && (
+                <View style={styles.multiCheckoutHeader}>
+                  <View style={[
+                    styles.checkbox, 
+                    isSelected && styles.checkedBox
+                  ]}>
+                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                  </View>
+                </View>
+              )}
+              
+              <View style={styles.itemHeader}>
+                <View style={styles.itemTitleSection}>
+                  <View style={styles.titleContainer}>
+                    <Title style={styles.itemTitle} numberOfLines={1}>
+                      {item.productName}
+                    </Title>
+                    <Paragraph style={styles.itemBarcode}>
+                      {item.barcode || 'No barcode'}
+                    </Paragraph>
+                  </View>
+                </View>
+                <Badge
+                  style={[styles.stockBadge, { 
+                    backgroundColor: item.currentQuantity > item.minStockLevel 
+                      ? colors.success 
+                      : item.currentQuantity > 0 
+                        ? colors.warning 
+                        : colors.danger 
+                  }]}
+                  size={8}
+                />
+              </View>
+
+              <View style={styles.itemInfo}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Stock:</Text>
+                  <Text style={styles.infoText}>
+                    {item.currentQuantity}/{item.minStockLevel}
+                  </Text>
+                </View>
+                
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Location:</Text>
+                  <Text style={styles.infoText} numberOfLines={1}>
+                    {item.location || 'No location'}
+                  </Text>
                 </View>
               </View>
-              <Badge
-                style={[styles.stockBadge, { 
-                  backgroundColor: item.currentQuantity > item.minStockLevel 
-                    ? colors.success 
-                    : item.currentQuantity > 0 
-                      ? colors.warning 
-                      : colors.danger 
-                }]}
-                size={8}
-              />
-            </View>
 
-            <View style={styles.itemInfo}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Stock:</Text>
-                <Text style={styles.infoText}>
-                  {item.currentQuantity}/{item.minStockLevel}
-                </Text>
-              </View>
-              
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Location:</Text>
-                <Text style={styles.infoText} numberOfLines={1}>
-                  {item.location || 'No location'}
-                </Text>
-              </View>
-            </View>
+              {isSelected && multiCheckoutMode && (
+                <View style={styles.quantityInputContainer}>
+                  <Text style={styles.quantityLabel}>Quantity:</Text>
+                  <CustomTextInput
+                    value={multiCheckoutQuantities[item.id] || '1'}
+                    onChangeText={(text) => updateMultiCheckoutQuantity(item.id, text)}
+                    mode="outlined"
+                    keyboardType="numeric"
+                    style={styles.multiQuantityInput}
+                    outlineColor={colors.borderLight}
+                    activeOutlineColor={colors.primary}
+                    dense
+                    right={null}
+                  />
+                </View>
+              )}
 
-            {item.currentQuantity === 0 && (
-              <Chip 
-                mode="flat" 
-                style={styles.outOfStockChip}
-                textStyle={styles.outOfStockChipText}
-                compact
-              >
-                Out of Stock
-              </Chip>
-            )}
-          </Card.Content>
-        </Card>
-      </TouchableOpacity>
-    </Animated.View>
-  );
+              {item.currentQuantity === 0 && (
+                <Chip 
+                  mode="flat" 
+                  style={styles.outOfStockChip}
+                  textStyle={styles.outOfStockChipText}
+                  compact
+                >
+                  Out of Stock
+                </Chip>
+              )}
+            </Card.Content>
+          </Card>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   const totalCheckoutItems = checkoutItems.reduce((sum, item) => sum + item.checkoutQuantity, 0);
 
@@ -313,6 +453,30 @@ const CheckoutScreen = ({ navigation, route }) => {
         >
           Low Stock
         </Chip>
+      </View>
+
+      {/* Multi-Checkout Controls */}
+      <View style={styles.multiCheckoutHeader}>
+        <Button
+          mode={multiCheckoutMode ? "contained" : "outlined"}
+          onPress={toggleMultiCheckoutMode}
+          style={styles.multiCheckoutToggle}
+          buttonColor={multiCheckoutMode ? colors.primary : colors.surface}
+          textColor={multiCheckoutMode ? colors.white : colors.primary}
+        >
+          {multiCheckoutMode ? 'Exit Multi-Select' : 'Multi-Select'}
+        </Button>
+        
+        {multiCheckoutMode && selectedForCheckout.length > 0 && (
+          <Button
+            mode="contained"
+            onPress={addMultipleToCheckout}
+            style={styles.addMultipleButton}
+            buttonColor={colors.success}
+          >
+            Add {selectedForCheckout.length} Items
+          </Button>
+        )}
       </View>
 
       {/* Checkout Summary */}
@@ -584,6 +748,68 @@ const styles = StyleSheet.create({
   outOfStockChipText: {
     color: colors.danger,
     fontSize: typography.fontSize.xs,
+  },
+  multiCheckoutHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  multiCheckoutToggle: {
+    borderColor: colors.primary,
+  },
+  addMultipleButton: {
+    marginLeft: spacing.sm,
+  },
+  selectedItemCard: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '05',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    top: -spacing.sm,
+    right: -spacing.sm,
+    zIndex: 1,
+  },
+  checkedBox: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  checkmark: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  quantityInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  quantityLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    marginRight: spacing.sm,
+    minWidth: 60,
+  },
+  multiQuantityInput: {
+    flex: 1,
+    height: 40,
   },
   loadingContainer: {
     flex: 1,
