@@ -19,6 +19,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { collection, onSnapshot, deleteDoc, doc, addDoc, updateDoc, Timestamp, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { verifyOwnership, verifyMultipleOwnership } from '../utils/security';
 import { setKits, setLoading, setActiveKit } from '../store/slices/treatmentKitsSlice';
 import { colors, spacing, borderRadius, typography, shadows } from '../constants/theme';
 
@@ -84,6 +85,13 @@ const TreatmentKitsScreen = ({ navigation }) => {
     if (!kitToDelete) return;
     
     try {
+      // SECURITY FIX: Verify ownership before deleting
+      const hasPermission = await verifyOwnership('treatmentKits', kitToDelete.id);
+      if (!hasPermission) {
+        Alert.alert('Access Denied', 'You do not have permission to delete this kit.');
+        return;
+      }
+
       await deleteDoc(doc(db, 'treatmentKits', kitToDelete.id));
       Alert.alert('Success', 'Treatment kit deleted successfully');
     } catch (error) {
@@ -128,10 +136,18 @@ const TreatmentKitsScreen = ({ navigation }) => {
           insufficientItems.push(`${kitItem.name} (need ${kitItem.quantity}, have ${inventoryItem.currentQuantity})`);
         } else {
           updatePromises.push(
-            updateDoc(doc(db, 'inventory', kitItem.inventoryId), {
-              currentQuantity: newQuantity,
-              lastUpdated: Timestamp.now()
-            })
+            (async () => {
+              // SECURITY FIX: Verify ownership before updating inventory
+              const hasPermission = await verifyOwnership('inventory', kitItem.inventoryId);
+              if (!hasPermission) {
+                throw new Error(`Access denied for inventory item: ${kitItem.name}`);
+              }
+              return updateDoc(doc(db, 'inventory', kitItem.inventoryId), {
+                currentQuantity: newQuantity,
+                lastUpdated: Timestamp.now(),
+                lastModifiedBy: user?.uid
+              });
+            })()
           );
           
           updatePromises.push(
@@ -162,9 +178,17 @@ const TreatmentKitsScreen = ({ navigation }) => {
       
       await Promise.all(updatePromises);
       
+      // SECURITY FIX: Verify ownership before updating kit
+      const hasPermission = await verifyOwnership('treatmentKits', selectedKit.id);
+      if (!hasPermission) {
+        Alert.alert('Access Denied', 'You do not have permission to update this kit.');
+        return;
+      }
+
       await updateDoc(doc(db, 'treatmentKits', selectedKit.id), {
         lastUsed: Timestamp.now(),
-        usageCount: (selectedKit.usageCount || 0) + 1
+        usageCount: (selectedKit.usageCount || 0) + 1,
+        lastModifiedBy: user?.uid
       });
       
       Alert.alert('Success', `All items from "${selectedKit.name}" kit checked out successfully`);

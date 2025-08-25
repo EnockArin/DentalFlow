@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useDispatch, useSelector } from 'react-redux';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { loginSuccess, logout } from '../store/slices/authSlice';
 import { setItems, setLoading } from '../store/slices/inventorySlice';
@@ -52,7 +52,17 @@ const AppNavigator = () => {
 
     dispatch(setLoading(true));
     
-    const inventoryQuery = query(collection(db, 'inventory'));
+    // SECURITY FIX: Add practice-level filtering to prevent IDOR vulnerability
+    const user = auth.currentUser;
+    if (!user) {
+      dispatch(setLoading(false));
+      return;
+    }
+    
+    const inventoryQuery = query(
+      collection(db, 'inventory'),
+      where('practiceId', '==', user.uid)
+    );
     const inventoryUnsubscribe = onSnapshot(inventoryQuery, (querySnapshot) => {
       const inventoryItems = [];
       querySnapshot.forEach((doc) => {

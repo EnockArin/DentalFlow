@@ -20,6 +20,7 @@ import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
 import { collection, onSnapshot, deleteDoc, doc, addDoc, updateDoc, Timestamp, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { verifyOwnership, ensureOwnership } from '../utils/security';
 import { setLocations, setLoading, addLocation, updateLocation } from '../store/slices/locationsSlice';
 import { colors, spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
@@ -128,13 +129,25 @@ const LocationsScreen = ({ navigation }) => {
       };
 
       if (editingLocation) {
-        await updateDoc(doc(db, 'locations', editingLocation.id), locationData);
+        // SECURITY FIX: Verify ownership before updating
+        const hasPermission = await verifyOwnership('locations', editingLocation.id);
+        if (!hasPermission) {
+          Alert.alert('Access Denied', 'You do not have permission to modify this location.');
+          return;
+        }
+        
+        await updateDoc(doc(db, 'locations', editingLocation.id), {
+          ...locationData,
+          lastModifiedBy: user?.uid
+        });
         Alert.alert('Success', 'Location updated successfully');
       } else {
-        await addDoc(collection(db, 'locations'), {
+        // SECURITY FIX: Ensure ownership for new locations
+        const securedLocationData = ensureOwnership({
           ...locationData,
           createdAt: Timestamp.now(),
         });
+        await addDoc(collection(db, 'locations'), securedLocationData);
         Alert.alert('Success', 'Location created successfully');
       }
 
@@ -160,6 +173,13 @@ const LocationsScreen = ({ navigation }) => {
     }
     
     try {
+      // SECURITY FIX: Verify ownership before deleting
+      const hasPermission = await verifyOwnership('locations', locationToDelete.id);
+      if (!hasPermission) {
+        Alert.alert('Access Denied', 'You do not have permission to delete this location.');
+        return;
+      }
+
       await deleteDoc(doc(db, 'locations', locationToDelete.id));
       Alert.alert('Success', 'Location deleted successfully');
     } catch (error) {

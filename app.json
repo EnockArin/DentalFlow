@@ -4,7 +4,7 @@
     "slug": "DentalFlow",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/app-icon.png",
+    "icon": "./app-icon.png",
     "scheme": "dentalflow",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
@@ -14,7 +14,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/app-icon.png",
+        "foregroundImage": "./app-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,

@@ -19,6 +19,7 @@ import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
 import { deleteDoc, doc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { verifyOwnership, ensureOwnership } from '../utils/security';
 import { colors, spacing, borderRadius, typography, shadows, statusColors } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
 
@@ -92,11 +93,20 @@ const InventoryListScreen = ({ navigation, route }) => {
     setAdjustmentLoading(true);
 
     try {
+      // SECURITY FIX: Verify ownership before updating
+      const hasPermission = await verifyOwnership('inventory', selectedItem.id);
+      if (!hasPermission) {
+        Alert.alert('Access Denied', 'You do not have permission to modify this item.');
+        setAdjustmentLoading(false);
+        return;
+      }
+
       // Update inventory item
       const itemRef = doc(db, 'inventory', selectedItem.id);
       await updateDoc(itemRef, { 
         currentQuantity: newQuantity,
-        lastUpdated: Timestamp.now()
+        lastUpdated: Timestamp.now(),
+        lastModifiedBy: user?.uid
       });
 
       // Log stock movement
@@ -140,6 +150,13 @@ const InventoryListScreen = ({ navigation, route }) => {
           style: 'destructive',
           onPress: async () => {
             try {
+              // SECURITY FIX: Verify ownership before deleting
+              const hasPermission = await verifyOwnership('inventory', itemId);
+              if (!hasPermission) {
+                Alert.alert('Access Denied', 'You do not have permission to delete this item.');
+                return;
+              }
+
               await deleteDoc(doc(db, 'inventory', itemId));
               Alert.alert('Success', 'Item deleted successfully');
             } catch (error) {

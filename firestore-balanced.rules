@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // SIMPLIFIED HELPER FUNCTIONS
+    // ============================================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isPracticeOwner(practiceId) {
+      return isAuthenticated() && request.auth.uid == practiceId;
+    }
+    
+    function isUserOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ============================================================================
+    // INVENTORY - PRACTICE LEVEL ISOLATION
+    // ============================================================================
+    match /inventory/{itemId} {
+      allow read, write: if isPracticeOwner(resource.data.practiceId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.practiceId == request.auth.uid;
+    }
+
+    // ============================================================================
+    // LOCATIONS - PRACTICE LEVEL ISOLATION
+    // ============================================================================
+    match /locations/{locationId} {
+      allow read, write: if isPracticeOwner(resource.data.practiceId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.practiceId == request.auth.uid;
+    }
+
+    // ============================================================================
+    // TREATMENT KITS - USER LEVEL ISOLATION
+    // ============================================================================
+    match /treatmentKits/{kitId} {
+      allow read, write: if isUserOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================================================
+    // AUDIT LOGS - CREATE ONLY
+    // ============================================================================
+    match /stockLog/{logId} {
+      allow read: if isUserOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+    }
+
+    match /stockTransfers/{transferId} {
+      allow read: if isUserOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isUserOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================================================
+    // USER DATA
+    // ============================================================================
+    match /userProfiles/{userId} {
+      allow read, write: if isUserOwner(userId);
+    }
+
+    match /shoppingLists/{listId} {
+      allow read, write: if isUserOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================================================
+    // DEFAULT DENY
+    // ============================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

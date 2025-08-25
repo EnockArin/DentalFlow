@@ -16,6 +16,7 @@ import LocationPicker from '../components/common/LocationPicker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { addDoc, collection, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { verifyOwnership, ensureOwnership } from '../utils/security';
 import { useSelector } from 'react-redux';
 import { colors, spacing, borderRadius, typography, shadows, components } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
@@ -141,15 +142,25 @@ const ItemDetailScreen = ({ navigation, route }) => {
       };
 
       if (isEditing) {
+        // SECURITY FIX: Verify ownership before updating
+        const hasPermission = await verifyOwnership('inventory', item.id);
+        if (!hasPermission) {
+          Alert.alert('Access Denied', 'You do not have permission to modify this item.');
+          return;
+        }
+
         // When editing, add the entered quantity to existing stock
         const quantityToAdd = parseInt(formData.currentQuantity) || 0;
         itemData.currentQuantity = (item.currentQuantity || 0) + quantityToAdd;
+        itemData.lastModifiedBy = user?.uid;
         
         await updateDoc(doc(db, 'inventory', item.id), itemData);
         Alert.alert('Success', `Item updated successfully. Added ${quantityToAdd} to stock.`);
       } else {
-        itemData.createdAt = Timestamp.now();
-        await addDoc(collection(db, 'inventory'), itemData);
+        // SECURITY FIX: Ensure ownership for new items
+        const securedItemData = ensureOwnership(itemData);
+        securedItemData.createdAt = Timestamp.now();
+        await addDoc(collection(db, 'inventory'), securedItemData);
         Alert.alert('Success', 'Item added successfully');
       }
 

@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // DEVELOPMENT RULES - USE ONLY FOR TESTING
+    // ============================================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Allow all authenticated users to read/write (WITH LOGGING)
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // NOTE: These rules provide NO data isolation between users
+    // Only use for development/testing environments
+    // NEVER use in production
+  }
+}

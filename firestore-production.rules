@@ -1,0 +1,232 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // HELPER FUNCTIONS - Security Building Blocks
+    // ============================================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserId() {
+      return request.auth.uid;
+    }
+    
+    function isOwner(ownerId) {
+      return isAuthenticated() && getUserId() == ownerId;
+    }
+    
+    function isPracticeOwner(practiceId) {
+      return isAuthenticated() && getUserId() == practiceId;
+    }
+    
+    function hasValidTimestamp() {
+      return request.resource.data.keys().hasAny(['createdAt', 'lastUpdated']) &&
+             request.resource.data.createdAt is timestamp &&
+             request.resource.data.lastUpdated is timestamp;
+    }
+    
+    function isValidEmail() {
+      return request.auth.token.email_verified == true;
+    }
+    
+    // ============================================================================
+    // INVENTORY COLLECTION - HIGHEST SECURITY PRIORITY
+    // ============================================================================
+    match /inventory/{itemId} {
+      // READ: Only practice owner can read their inventory
+      allow read: if isPracticeOwner(resource.data.practiceId) && 
+                     isValidEmail();
+      
+      // CREATE: Only authenticated users can create items for their practice
+      allow create: if isAuthenticated() && 
+                       isValidEmail() &&
+                       isPracticeOwner(request.resource.data.practiceId) &&
+                       request.resource.data.createdBy == getUserId() &&
+                       request.resource.data.practiceId == getUserId() &&
+                       hasValidTimestamp() &&
+                       // Validate required fields
+                       request.resource.data.keys().hasAll([
+                         'productName', 'currentQuantity', 'minStockLevel', 
+                         'practiceId', 'createdBy', 'createdAt', 'lastUpdated'
+                       ]) &&
+                       // Data type validation
+                       request.resource.data.currentQuantity is int &&
+                       request.resource.data.minStockLevel is int &&
+                       request.resource.data.currentQuantity >= 0 &&
+                       request.resource.data.productName is string &&
+                       request.resource.data.productName.size() > 0;
+      
+      // UPDATE: Only practice owner can update their items
+      allow update: if isPracticeOwner(resource.data.practiceId) && 
+                       isPracticeOwner(request.resource.data.practiceId) &&
+                       isValidEmail() &&
+                       request.resource.data.practiceId == resource.data.practiceId && // Prevent ownership transfer
+                       request.resource.data.lastModifiedBy == getUserId() &&
+                       hasValidTimestamp() &&
+                       request.resource.data.currentQuantity >= 0;
+      
+      // DELETE: Only practice owner can delete their items
+      allow delete: if isPracticeOwner(resource.data.practiceId) && 
+                       isValidEmail();
+    }
+
+    // ============================================================================
+    // LOCATIONS COLLECTION - PRACTICE ISOLATION
+    // ============================================================================
+    match /locations/{locationId} {
+      allow read: if isPracticeOwner(resource.data.practiceId) && 
+                     isValidEmail();
+      
+      allow create: if isAuthenticated() && 
+                       isValidEmail() &&
+                       isPracticeOwner(request.resource.data.practiceId) &&
+                       request.resource.data.createdBy == getUserId() &&
+                       request.resource.data.keys().hasAll([
+                         'name', 'type', 'practiceId', 'createdBy', 'createdAt'
+                       ]) &&
+                       request.resource.data.name is string &&
+                       request.resource.data.name.size() > 0 &&
+                       request.resource.data.type in ['office', 'storage', 'treatment', 'lab', 'other'];
+      
+      allow update: if isPracticeOwner(resource.data.practiceId) && 
+                       isPracticeOwner(request.resource.data.practiceId) &&
+                       isValidEmail() &&
+                       request.resource.data.practiceId == resource.data.practiceId &&
+                       request.resource.data.lastModifiedBy == getUserId();
+      
+      allow delete: if isPracticeOwner(resource.data.practiceId) && 
+                       isValidEmail();
+    }
+
+    // ============================================================================
+    // TREATMENT KITS COLLECTION - USER ISOLATION
+    // ============================================================================
+    match /treatmentKits/{kitId} {
+      allow read: if isOwner(resource.data.userId) && 
+                     isValidEmail();
+      
+      allow create: if isAuthenticated() && 
+                       isValidEmail() &&
+                       isOwner(request.resource.data.userId) &&
+                       request.resource.data.createdBy == getUserId() &&
+                       request.resource.data.keys().hasAll([
+                         'name', 'description', 'items', 'userId', 'createdBy', 'createdAt'
+                       ]) &&
+                       request.resource.data.name is string &&
+                       request.resource.data.name.size() > 0 &&
+                       request.resource.data.items is list;
+      
+      allow update: if isOwner(resource.data.userId) && 
+                       isOwner(request.resource.data.userId) &&
+                       isValidEmail() &&
+                       request.resource.data.userId == resource.data.userId &&
+                       request.resource.data.lastModifiedBy == getUserId();
+      
+      allow delete: if isOwner(resource.data.userId) && 
+                       isValidEmail();
+    }
+
+    // ============================================================================
+    // AUDIT LOGS - READ-ONLY AFTER CREATION
+    // ============================================================================
+    match /stockLog/{logId} {
+      allow read: if isOwner(resource.data.userId) && 
+                     isValidEmail();
+      
+      allow create: if isAuthenticated() && 
+                       isValidEmail() &&
+                       isOwner(request.resource.data.userId) &&
+                       request.resource.data.keys().hasAll([
+                         'inventoryId', 'userId', 'userEmail', 'changeType', 
+                         'quantityChanged', 'timestamp'
+                       ]) &&
+                       request.resource.data.changeType in ['in', 'out'] &&
+                       request.resource.data.quantityChanged is int &&
+                       request.resource.data.timestamp is timestamp;
+      
+      // NO UPDATE OR DELETE - Audit log integrity
+    }
+
+    // ============================================================================
+    // STOCK TRANSFERS - PRACTICE ISOLATION
+    // ============================================================================
+    match /stockTransfers/{transferId} {
+      allow read: if isOwner(resource.data.userId) && 
+                     isValidEmail();
+      
+      allow create: if isAuthenticated() && 
+                       isValidEmail() &&
+                       isOwner(request.resource.data.userId) &&
+                       request.resource.data.keys().hasAll([
+                         'fromLocationId', 'toLocationId', 'items', 'userId', 'timestamp'
+                       ]) &&
+                       request.resource.data.items is list &&
+                       request.resource.data.items.size() > 0;
+      
+      // Stock transfers are immutable after creation for audit purposes
+    }
+
+    // ============================================================================
+    // TRANSACTIONS - CHECKOUT RECORDS (IMMUTABLE)
+    // ============================================================================
+    match /transactions/{transactionId} {
+      allow read: if isOwner(resource.data.userId) && 
+                     isValidEmail();
+      
+      allow create: if isAuthenticated() && 
+                       isValidEmail() &&
+                       isOwner(request.resource.data.userId) &&
+                       request.resource.data.keys().hasAll([
+                         'items', 'userId', 'timestamp', 'totalItems'
+                       ]) &&
+                       request.resource.data.items is list &&
+                       request.resource.data.totalItems is int &&
+                       request.resource.data.totalItems > 0;
+      
+      // NO UPDATE OR DELETE - Transaction integrity
+    }
+
+    // ============================================================================
+    // USER PROFILES - SELF-MANAGEMENT ONLY
+    // ============================================================================
+    match /userProfiles/{userId} {
+      allow read, write: if isOwner(userId) && 
+                           isValidEmail() &&
+                           request.resource.data.keys().hasAll(['userId', 'email']) &&
+                           request.resource.data.userId == getUserId();
+    }
+
+    // ============================================================================
+    // SHOPPING LISTS - USER ISOLATION
+    // ============================================================================
+    match /shoppingLists/{listId} {
+      allow read, write: if isOwner(resource.data.userId) && 
+                           isValidEmail();
+      
+      allow create: if isAuthenticated() && 
+                       isValidEmail() &&
+                       isOwner(request.resource.data.userId) &&
+                       request.resource.data.keys().hasAll(['name', 'items', 'userId']);
+    }
+
+    // ============================================================================
+    // RATE LIMITING COLLECTION (FOR ABUSE PREVENTION)
+    // ============================================================================
+    match /rateLimits/{userId} {
+      allow read, write: if isOwner(userId) && 
+                           isValidEmail();
+    }
+
+    // ============================================================================
+    // DEFAULT DENY ALL - MAXIMUM SECURITY
+    // ============================================================================
+    // Any collection not explicitly defined above is completely blocked
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

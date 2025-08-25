@@ -1,0 +1,113 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the resource
+    function isOwner(practiceId) {
+      return request.auth.uid == practiceId;
+    }
+    
+    // Helper function to check if user owns the document
+    function ownsDocument() {
+      return isAuthenticated() && 
+             (resource.data.practiceId == request.auth.uid || 
+              resource.data.userId == request.auth.uid);
+    }
+    
+    // Helper function to validate required ownership fields on create/update
+    function hasValidOwnership() {
+      return isAuthenticated() && 
+             (request.resource.data.practiceId == request.auth.uid ||
+              request.resource.data.userId == request.auth.uid);
+    }
+
+    // INVENTORY COLLECTION - CRITICAL SECURITY
+    match /inventory/{itemId} {
+      // Read: Only allow reading items owned by the authenticated user
+      allow read: if isAuthenticated() && 
+                     (resource.data.practiceId == request.auth.uid);
+      
+      // Write: Only allow creating items with proper ownership
+      allow create: if isAuthenticated() && 
+                       request.resource.data.practiceId == request.auth.uid &&
+                       request.resource.data.createdBy == request.auth.uid;
+      
+      // Update: Only allow updating owned items
+      allow update: if isAuthenticated() && 
+                       resource.data.practiceId == request.auth.uid &&
+                       request.resource.data.practiceId == request.auth.uid;
+      
+      // Delete: Only allow deleting owned items
+      allow delete: if isAuthenticated() && 
+                       resource.data.practiceId == request.auth.uid;
+    }
+
+    // LOCATIONS COLLECTION
+    match /locations/{locationId} {
+      allow read, write: if isAuthenticated() && 
+                           resource.data.practiceId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.practiceId == request.auth.uid;
+    }
+
+    // TREATMENT KITS COLLECTION
+    match /treatmentKits/{kitId} {
+      allow read, write: if isAuthenticated() && 
+                           (resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && 
+                      request.resource.data.userId == request.auth.uid;
+    }
+
+    // STOCK LOG - READ ONLY FOR AUDIT TRAIL
+    match /stockLog/{logId} {
+      allow read: if isAuthenticated() && 
+                     resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.userId == request.auth.uid;
+      // No update or delete allowed - audit log integrity
+    }
+
+    // STOCK TRANSFERS
+    match /stockTransfers/{transferId} {
+      allow read, write: if isAuthenticated() && 
+                           resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.userId == request.auth.uid;
+    }
+
+    // TRANSACTIONS/CHECKOUT RECORDS
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && 
+                     resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.userId == request.auth.uid;
+      // No update or delete allowed - transaction integrity
+    }
+
+    // USER PROFILES (if you add them later)
+    match /userProfiles/{userId} {
+      allow read, write: if isAuthenticated() && 
+                           request.auth.uid == userId;
+    }
+
+    // SHOPPING LISTS (stored in database instead of local storage)
+    match /shoppingLists/{listId} {
+      allow read, write: if isAuthenticated() && 
+                           resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.userId == request.auth.uid;
+    }
+
+    // DEFAULT DENY ALL - Security by default
+    // Any collection not explicitly mentioned above is DENIED
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
