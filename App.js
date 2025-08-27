@@ -5,6 +5,7 @@ import { Provider as ReduxProvider } from 'react-redux';
 import { StatusBar } from 'expo-status-bar';
 import { store } from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
+import { configureGoogleSignIn } from './src/services/googleAuth';
 
 // Configure React Native Paper theme without MaterialCommunityIcons
 const theme = {
@@ -19,6 +20,9 @@ function App() {
       const originalFreeze = Object.freeze;
       Object.freeze = (obj) => obj;
     }
+    
+    // Configure Google Sign-In
+    configureGoogleSignIn();
   }, []);
 
   return (

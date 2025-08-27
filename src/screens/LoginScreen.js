@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Text } from 'react-native';
-import { Button, Card, Title, Paragraph, TextInput } from 'react-native-paper';
+import { Button, Card, Title, Paragraph, TextInput, Divider } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
+import { configureGoogleSignIn, signInWithGoogle } from '../services/googleAuth';
 import GradientBackground from '../components/common/GradientBackground';
 import { colors, spacing, typography, borderRadius, shadows, components } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
@@ -15,9 +16,15 @@ const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   
   const dispatch = useDispatch();
   const { loading, error } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    // Configure Google Sign-In when component mounts
+    configureGoogleSignIn();
+  }, []);
 
 
   const handleLogin = async () => {
@@ -59,6 +66,32 @@ const LoginScreen = ({ navigation }) => {
       
       dispatch(loginFailure(errorMessage));
       Alert.alert('Login Error', errorMessage);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    dispatch(loginStart());
+    
+    try {
+      const result = await signInWithGoogle();
+      
+      if (result.success) {
+        const { user } = result;
+        dispatch(loginSuccess({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+        }));
+      } else {
+        dispatch(loginFailure(result.error));
+        Alert.alert('Google Sign-In Error', result.error);
+      }
+    } catch (error) {
+      dispatch(loginFailure('Google Sign-In failed. Please try again.'));
+      Alert.alert('Google Sign-In Error', 'Google Sign-In failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -141,13 +174,34 @@ const LoginScreen = ({ navigation }) => {
               <Button
                 mode="contained"
                 onPress={handleLogin}
-                loading={loading}
+                loading={loading && !googleLoading}
                 disabled={loading}
                 style={styles.button}
                 contentStyle={styles.buttonContent}
                 buttonColor={colors.primary}
               >
-                {loading ? 'Signing In...' : 'Sign In'}
+                {loading && !googleLoading ? 'Signing In...' : 'Sign In'}
+              </Button>
+
+              {/* Divider */}
+              <View style={styles.dividerContainer}>
+                <Divider style={styles.divider} />
+                <Text style={styles.dividerText}>OR</Text>
+                <Divider style={styles.divider} />
+              </View>
+
+              {/* Google Sign-In Button */}
+              <Button
+                mode="outlined"
+                onPress={handleGoogleSignIn}
+                loading={googleLoading}
+                disabled={loading}
+                style={styles.googleButton}
+                contentStyle={styles.buttonContent}
+                textColor={colors.textPrimary}
+                icon="google"
+              >
+                {googleLoading ? 'Signing In with Google...' : 'Continue with Google'}
               </Button>
 
               {/* Forgot Password */}
@@ -359,6 +413,27 @@ const styles = StyleSheet.create({
   },
   registerButton: {
     marginLeft: spacing.xs,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.lg,
+  },
+  divider: {
+    flex: 1,
+    backgroundColor: colors.borderLight,
+  },
+  dividerText: {
+    marginHorizontal: spacing.md,
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.fontWeight.medium,
+  },
+  googleButton: {
+    marginBottom: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderColor: colors.borderLight,
+    borderWidth: 1,
   },
 });
 

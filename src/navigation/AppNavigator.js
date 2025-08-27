@@ -8,6 +8,7 @@ import { auth, db } from '../config/firebase';
 import { loginSuccess, logout } from '../store/slices/authSlice';
 import { setItems, setLoading } from '../store/slices/inventorySlice';
 import { setPractices, setLoading as setPracticesLoading } from '../store/slices/practicesSlice';
+import { signOutFromGoogle } from '../services/googleAuth';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';

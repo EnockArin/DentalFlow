@@ -7,6 +7,7 @@ import { signOut } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { logout } from '../store/slices/authSlice';
+import { signOutFromGoogle } from '../services/googleAuth';
 import { ensureOwnership } from '../utils/security';
 import { colors, spacing, borderRadius, typography, shadows, components } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
@@ -48,6 +49,9 @@ const DashboardScreen = ({ navigation }) => {
 
   const handleLogout = async () => {
     try {
+      // Sign out from Google if user was signed in with Google
+      await signOutFromGoogle();
+      // Sign out from Firebase
       await signOut(auth);
       dispatch(logout());
     } catch (error) {
