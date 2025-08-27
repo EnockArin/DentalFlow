@@ -26,20 +26,96 @@ export const signInWithGoogle = async () => {
       };
     }
     
-    // For mobile development, show helpful message about testing alternatives
-    if (__DEV__ && Platform.OS !== 'web') {
-      console.log('🚧 Development Mode: Try Google Sign-In on web platform or use email/password');
+    // For mobile platforms, use a custom redirect approach that works with Firebase
+    const clientId = process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID;
+    
+    if (!clientId) {
+      throw new Error('Google Web Client ID not found in environment variables');
+    }
+
+    console.log('📱 Attempting mobile Google Sign-In...');
+    
+    try {
+      // Create a custom redirect URI that Firebase can handle
+      const customScheme = 'https://auth.expo.io/@anonymous/dentalflow';
+      
+      const request = new AuthSession.AuthRequest({
+        clientId: clientId,
+        scopes: ['openid', 'profile', 'email'],
+        responseType: AuthSession.ResponseType.Code, // Use code instead of token
+        redirectUri: customScheme,
+        additionalParameters: {
+          access_type: 'offline',
+        },
+      });
+
+      console.log('🔗 Using redirect URI:', customScheme);
+
+      const result = await request.promptAsync({
+        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        additionalParameters: {
+          prompt: 'select_account',
+        },
+      });
+
+      console.log('📱 Auth result:', result.type);
+
+      if (result.type === 'success') {
+        const { code } = result.params;
+        
+        if (code) {
+          // Exchange code for ID token
+          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              client_id: clientId,
+              code: code,
+              redirect_uri: customScheme,
+              grant_type: 'authorization_code',
+            }),
+          });
+          
+          const tokens = await tokenResponse.json();
+          
+          if (tokens.id_token) {
+            // Create Firebase credential
+            const googleCredential = GoogleAuthProvider.credential(tokens.id_token);
+            
+            // Sign in to Firebase
+            const userCredential = await signInWithCredential(auth, googleCredential);
+            
+            return {
+              success: true,
+              user: userCredential.user,
+            };
+          }
+        }
+        
+        return {
+          success: false,
+          error: 'Failed to get authentication token from Google.',
+        };
+      } else if (result.type === 'cancel') {
+        return {
+          success: false,
+          error: 'Google Sign-In was cancelled.',
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Google Sign-In failed. Please try again.',
+        };
+      }
+    } catch (error) {
+      console.error('Mobile Google Sign-In Error:', error);
       return {
         success: false,
-        error: 'Google Sign-In works on web platform. For mobile testing, use email/password authentication or create a production build.',
+        error: 'Google Sign-In not available in development mode. Please use email/password for testing.',
       };
     }
-    
-    // Fallback for production mobile builds (when properly configured)
-    return {
-      success: false,
-      error: 'Google Sign-In configuration needed for this platform.',
-    };
   } catch (error) {
     console.error('Google Sign-In Error:', error);
     
