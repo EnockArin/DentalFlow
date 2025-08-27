@@ -1,39 +1,70 @@
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../config/firebase';
 
+// Complete the authentication flow for web browsers
+WebBrowser.maybeCompleteAuthSession();
+
 // Configure Google Sign-In
 export const configureGoogleSignIn = () => {
-  GoogleSignin.configure({
-    // The web client ID from Firebase console
-    webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
-    // Enable offline access
-    offlineAccess: true,
-    // Request user profile and email
-    scopes: ['profile', 'email'],
-  });
+  // No configuration needed for Expo AuthSession
+  console.log('Google Sign-In configured for Expo');
 };
 
-// Sign in with Google
+// Sign in with Google using Expo AuthSession
 export const signInWithGoogle = async () => {
   try {
-    // Check if device supports Google Play Services
-    await GoogleSignin.hasPlayServices();
+    const clientId = process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID;
     
-    // Get user info from Google
-    const userInfo = await GoogleSignin.signIn();
-    
-    // Create Firebase credential
-    const googleCredential = GoogleAuthProvider.credential(userInfo.idToken);
-    
-    // Sign in to Firebase with the credential
-    const userCredential = await signInWithCredential(auth, googleCredential);
-    
-    return {
-      success: true,
-      user: userCredential.user,
-      userInfo,
-    };
+    if (!clientId) {
+      throw new Error('Google Web Client ID not found in environment variables');
+    }
+
+    // Configure the auth request
+    const request = new AuthSession.AuthRequest({
+      clientId: clientId,
+      scopes: ['openid', 'profile', 'email'],
+      responseType: AuthSession.ResponseType.IdToken,
+      redirectUri: AuthSession.makeRedirectUri({
+        useProxy: true,
+      }),
+    });
+
+    // Prompt for authentication
+    const result = await request.promptAsync({
+      authorizationEndpoint: 'https://accounts.google.com/oauth/v2/auth',
+    });
+
+    if (result.type === 'success') {
+      // Extract the ID token
+      const { id_token } = result.params;
+      
+      if (!id_token) {
+        throw new Error('No ID token received from Google');
+      }
+
+      // Create Firebase credential
+      const googleCredential = GoogleAuthProvider.credential(id_token);
+      
+      // Sign in to Firebase with the credential
+      const userCredential = await signInWithCredential(auth, googleCredential);
+      
+      return {
+        success: true,
+        user: userCredential.user,
+      };
+    } else if (result.type === 'cancel') {
+      return {
+        success: false,
+        error: 'Google Sign-In was cancelled.',
+      };
+    } else {
+      return {
+        success: false,
+        error: 'Google Sign-In failed. Please try again.',
+      };
+    }
   } catch (error) {
     console.error('Google Sign-In Error:', error);
     
@@ -70,15 +101,6 @@ export const signInWithGoogle = async () => {
       }
     }
     
-    // Handle Google Sign-In specific errors
-    if (error.code === 12501) {
-      // User cancelled the sign-in
-      errorMessage = 'Google Sign-In was cancelled.';
-    } else if (error.code === 7) {
-      // Network error
-      errorMessage = 'Network error. Please check your internet connection.';
-    }
-    
     return {
       success: false,
       error: errorMessage,
@@ -86,10 +108,11 @@ export const signInWithGoogle = async () => {
   }
 };
 
-// Sign out from Google
+// Sign out from Google (no-op for Expo AuthSession)
 export const signOutFromGoogle = async () => {
   try {
-    await GoogleSignin.signOut();
+    // For Expo AuthSession, we don't need to do anything special
+    // Firebase sign-out handles everything
     return { success: true };
   } catch (error) {
     console.error('Google Sign-Out Error:', error);
@@ -100,23 +123,33 @@ export const signOutFromGoogle = async () => {
   }
 };
 
-// Check if user is signed in to Google
+// Check if user is signed in to Google (no-op for Expo AuthSession)
 export const isSignedInToGoogle = async () => {
-  try {
-    return await GoogleSignin.isSignedIn();
-  } catch (error) {
-    console.error('Error checking Google Sign-In status:', error);
-    return false;
-  }
+  // For Expo AuthSession, we rely on Firebase auth state
+  return auth.currentUser !== null;
 };
 
-// Get current Google user info
+// Get current Google user info (use Firebase user)
 export const getCurrentGoogleUser = async () => {
   try {
-    const userInfo = await GoogleSignin.signInSilently();
-    return { success: true, userInfo };
+    const user = auth.currentUser;
+    if (user) {
+      return { 
+        success: true, 
+        userInfo: {
+          user: {
+            id: user.uid,
+            email: user.email,
+            name: user.displayName,
+            photo: user.photoURL,
+          }
+        }
+      };
+    } else {
+      return { success: false, error: 'No user signed in' };
+    }
   } catch (error) {
-    console.error('Error getting current Google user:', error);
+    console.error('Error getting current user:', error);
     return { success: false, error: error.message };
   }
 };

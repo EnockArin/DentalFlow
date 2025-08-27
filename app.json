@@ -44,6 +44,11 @@
           "cameraPermission": "Allow DentalFlow to access camera for barcode scanning."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "29486aca-25bb-4a27-ada4-84f5df37c894"
+      }
+    }
   }
 }
