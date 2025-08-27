@@ -53,7 +53,7 @@ export const validateEmail = (email) => {
   return { isValid: true, message: '' };
 };
 
-// Enhanced password validation
+// Simplified password validation - minimum length only
 export const validatePassword = (password) => {
   if (!password || typeof password !== 'string') {
     return { isValid: false, message: 'Password is required', requirements: {} };
@@ -61,24 +61,13 @@ export const validatePassword = (password) => {
 
   const requirements = {
     minLength: password.length >= 8,
-    hasUpperCase: /[A-Z]/.test(password),
-    hasLowerCase: /[a-z]/.test(password),
-    hasNumbers: /\d/.test(password),
-    hasSymbols: /[!@#$%^&*(),.?":{}|<>]/.test(password)
   };
 
-  const isValid = Object.values(requirements).every(req => req);
+  const isValid = requirements.minLength;
   
   let message = '';
   if (!isValid) {
-    const failedRequirements = [];
-    if (!requirements.minLength) failedRequirements.push('at least 8 characters');
-    if (!requirements.hasUpperCase) failedRequirements.push('uppercase letter');
-    if (!requirements.hasLowerCase) failedRequirements.push('lowercase letter');
-    if (!requirements.hasNumbers) failedRequirements.push('number');
-    if (!requirements.hasSymbols) failedRequirements.push('special character');
-    
-    message = `Password must contain: ${failedRequirements.join(', ')}`;
+    message = 'Password must be at least 8 characters long';
   }
 
   return { isValid, message, requirements };

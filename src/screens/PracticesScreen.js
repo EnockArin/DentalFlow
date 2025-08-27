@@ -21,34 +21,30 @@ import { useDispatch, useSelector } from 'react-redux';
 import { collection, onSnapshot, deleteDoc, doc, addDoc, updateDoc, Timestamp, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { verifyOwnership, ensureOwnership } from '../utils/security';
-import { setLocations, setLoading, addLocation, updateLocation } from '../store/slices/locationsSlice';
+import { setPractices, setLoading, addPractice, updatePractice } from '../store/slices/practicesSlice';
 import { colors, spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
 
-const LocationsScreen = ({ navigation }) => {
+const PracticesScreen = ({ navigation }) => {
   const dispatch = useDispatch();
-  const { locations, loading } = useSelector((state) => state.locations);
+  const { practices, loading } = useSelector((state) => state.practices);
   const { user } = useSelector((state) => state.auth);
   const { items } = useSelector((state) => state.inventory);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
-  const [locationToDelete, setLocationToDelete] = useState(null);
+  const [practiceToDelete, setPracticeToDelete] = useState(null);
   const [editDialogVisible, setEditDialogVisible] = useState(false);
-  const [editingLocation, setEditingLocation] = useState(null);
-  const [locationForm, setLocationForm] = useState({
+  const [editingPractice, setEditingPractice] = useState(null);
+  const [practiceForm, setPracticeForm] = useState({
     name: '',
-    type: 'operatory',
+    type: 'practice',
     description: '',
     address: '',
   });
 
-  const locationTypes = [
-    { value: 'operatory', label: 'Operatory', icon: '🦷' },
-    { value: 'clinic', label: 'Clinic', icon: '🏥' },
-    { value: 'storage', label: 'Storage', icon: '📦' },
-    { value: 'sterilization', label: 'Sterilization', icon: '🧪' },
-    { value: 'lab', label: 'Lab', icon: '🔬' },
+  const practiceTypes = [
+    { value: 'practice', label: 'Practice', icon: '🦷' },
   ];
 
   useEffect(() => {
@@ -56,117 +52,117 @@ const LocationsScreen = ({ navigation }) => {
 
     dispatch(setLoading(true));
     
-    const q = query(collection(db, 'locations'), where('practiceId', '==', user.uid));
+    const q = query(collection(db, 'practices'), where('practiceId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const locationsData = snapshot.docs.map(doc => ({
+      const practicesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate(),
         updatedAt: doc.data().updatedAt?.toDate(),
       }));
-      dispatch(setLocations(locationsData));
+      dispatch(setPractices(practicesData));
       dispatch(setLoading(false));
     }, (error) => {
-      console.error('Error fetching locations:', error);
+      console.error('Error fetching practices:', error);
       dispatch(setLoading(false));
     });
 
     return () => unsubscribe();
   }, [user, dispatch]);
 
-  const filteredLocations = (locations || []).filter(location =>
-    (location.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
-    (location.type || '').toLowerCase().includes((searchQuery || '').toLowerCase())
+  const filteredPractices = (practices || []).filter(practice =>
+    (practice.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+    (practice.type || '').toLowerCase().includes((searchQuery || '').toLowerCase())
   );
 
-  const getLocationInventoryCount = (locationId) => {
-    return items.filter(item => item.locationId === locationId).length;
+  const getPracticeInventoryCount = (practiceId) => {
+    return items.filter(item => item.practiceId === practiceId).length;
   };
 
-  const getLocationLowStockCount = (locationId) => {
+  const getPracticeLowStockCount = (practiceId) => {
     return items.filter(item => 
-      item.locationId === locationId && 
+      item.practiceId === practiceId && 
       item.currentQuantity <= item.minStockLevel
     ).length;
   };
 
-  const handleCreateLocation = () => {
-    setEditingLocation(null);
-    setLocationForm({
+  const handleCreatePractice = () => {
+    setEditingPractice(null);
+    setPracticeForm({
       name: '',
-      type: 'operatory',
+      type: 'practice',
       description: '',
       address: '',
     });
     setEditDialogVisible(true);
   };
 
-  const handleEditLocation = (location) => {
-    setEditingLocation(location);
-    setLocationForm({
-      name: location.name || '',
-      type: location.type || 'operatory',
-      description: location.description || '',
-      address: location.address || '',
+  const handleEditPractice = (practice) => {
+    setEditingPractice(practice);
+    setPracticeForm({
+      name: practice.name || '',
+      type: practice.type || 'practice',
+      description: practice.description || '',
+      address: practice.address || '',
     });
     setEditDialogVisible(true);
   };
 
-  const handleSaveLocation = async () => {
-    if (!locationForm.name.trim()) {
-      Alert.alert('Required Field', 'Please enter a location name');
+  const handleSavePractice = async () => {
+    if (!practiceForm.name.trim()) {
+      Alert.alert('Required Field', 'Please enter a practice name');
       return;
     }
 
     try {
-      const locationData = {
-        name: locationForm.name.trim(),
-        type: locationForm.type,
-        description: locationForm.description.trim(),
-        address: locationForm.address.trim(),
+      const practiceData = {
+        name: practiceForm.name.trim(),
+        type: practiceForm.type,
+        description: practiceForm.description.trim(),
+        address: practiceForm.address.trim(),
         practiceId: user?.uid,
         updatedAt: Timestamp.now(),
       };
 
-      if (editingLocation) {
+      if (editingPractice) {
         // SECURITY FIX: Verify ownership before updating
-        const hasPermission = await verifyOwnership('locations', editingLocation.id);
+        const hasPermission = await verifyOwnership('practices', editingPractice.id);
         if (!hasPermission) {
-          Alert.alert('Access Denied', 'You do not have permission to modify this location.');
+          Alert.alert('Access Denied', 'You do not have permission to modify this practice.');
           return;
         }
         
-        await updateDoc(doc(db, 'locations', editingLocation.id), {
-          ...locationData,
+        await updateDoc(doc(db, 'practices', editingPractice.id), {
+          ...practiceData,
           lastModifiedBy: user?.uid
         });
-        Alert.alert('Success', 'Location updated successfully');
+        Alert.alert('Success', 'Practice updated successfully');
       } else {
-        // SECURITY FIX: Ensure ownership for new locations
-        const securedLocationData = ensureOwnership({
-          ...locationData,
+        // SECURITY FIX: Ensure ownership for new practices
+        const securedPracticeData = ensureOwnership({
+          ...practiceData,
           createdAt: Timestamp.now(),
         });
-        await addDoc(collection(db, 'locations'), securedLocationData);
-        Alert.alert('Success', 'Location created successfully');
+        await addDoc(collection(db, 'practices'), securedPracticeData);
+        Alert.alert('Success', 'Practice created successfully');
       }
 
       setEditDialogVisible(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to save location');
+      Alert.alert('Error', 'Failed to save practice');
       console.error(error);
     }
   };
 
-  const handleDeleteLocation = async () => {
-    if (!locationToDelete) return;
+  const handleDeletePractice = async () => {
+    if (!practiceToDelete) return;
     
-    // Check if location has inventory items
-    const locationItems = items.filter(item => item.locationId === locationToDelete.id);
-    if (locationItems.length > 0) {
+    // Check if practice has inventory items
+    const practiceItems = items.filter(item => item.practiceId === practiceToDelete.id);
+    if (practiceItems.length > 0) {
       Alert.alert(
-        'Cannot Delete Location',
-        `This location has ${locationItems.length} inventory items. Please transfer or remove all items before deleting the location.`
+        'Cannot Delete Practice',
+        `This practice has ${practiceItems.length} inventory items. Please transfer or remove all items before deleting the practice.`
       );
       setDeleteDialogVisible(false);
       return;
@@ -174,61 +170,61 @@ const LocationsScreen = ({ navigation }) => {
     
     try {
       // SECURITY FIX: Verify ownership before deleting
-      const hasPermission = await verifyOwnership('locations', locationToDelete.id);
+      const hasPermission = await verifyOwnership('practices', practiceToDelete.id);
       if (!hasPermission) {
-        Alert.alert('Access Denied', 'You do not have permission to delete this location.');
+        Alert.alert('Access Denied', 'You do not have permission to delete this practice.');
         return;
       }
 
-      await deleteDoc(doc(db, 'locations', locationToDelete.id));
-      Alert.alert('Success', 'Location deleted successfully');
+      await deleteDoc(doc(db, 'practices', practiceToDelete.id));
+      Alert.alert('Success', 'Practice deleted successfully');
     } catch (error) {
-      Alert.alert('Error', 'Failed to delete location');
+      Alert.alert('Error', 'Failed to delete practice');
       console.error(error);
     } finally {
       setDeleteDialogVisible(false);
-      setLocationToDelete(null);
+      setPracticeToDelete(null);
     }
   };
 
-  const confirmDelete = (location) => {
-    setLocationToDelete(location);
+  const confirmDelete = (practice) => {
+    setPracticeToDelete(practice);
     setDeleteDialogVisible(true);
   };
 
-  const getLocationTypeInfo = (type) => {
-    return locationTypes.find(t => t.value === type) || locationTypes[0];
+  const getPracticeTypeInfo = (type) => {
+    return practiceTypes.find(t => t.value === type) || practiceTypes[0];
   };
 
-  const renderLocationCard = (location) => {
-    const typeInfo = getLocationTypeInfo(location.type);
-    const inventoryCount = getLocationInventoryCount(location.id);
-    const lowStockCount = getLocationLowStockCount(location.id);
+  const renderPracticeCard = (practice) => {
+    const typeInfo = getPracticeTypeInfo(practice.type);
+    const inventoryCount = getPracticeInventoryCount(practice.id);
+    const lowStockCount = getPracticeLowStockCount(practice.id);
     
     return (
-      <Card key={location.id} style={styles.locationCard}>
-        <TouchableOpacity onPress={() => handleEditLocation(location)}>
-          <Card.Content style={styles.locationContent}>
-            <View style={styles.locationHeader}>
-              <View style={styles.locationTitleRow}>
-                <Text style={styles.locationIcon}>{typeInfo.icon}</Text>
-                <View style={styles.locationInfo}>
-                  <Title style={styles.locationName}>{location.name}</Title>
-                  <Paragraph style={styles.locationType}>{typeInfo.label}</Paragraph>
-                  {location.description && (
-                    <Paragraph style={styles.locationDescription}>{location.description}</Paragraph>
+      <Card key={practice.id} style={styles.practiceCard}>
+        <TouchableOpacity onPress={() => handleEditPractice(practice)}>
+          <Card.Content style={styles.practiceContent}>
+            <View style={styles.practiceHeader}>
+              <View style={styles.practiceTitleRow}>
+                <Text style={styles.practiceIcon}>{typeInfo.icon}</Text>
+                <View style={styles.practiceInfo}>
+                  <Title style={styles.practiceName}>{practice.name}</Title>
+                  <Paragraph style={styles.practiceType}>{typeInfo.label}</Paragraph>
+                  {practice.description && (
+                    <Paragraph style={styles.practiceDescription}>{practice.description}</Paragraph>
                   )}
                 </View>
               </View>
               <TouchableOpacity
-                onPress={() => confirmDelete(location)}
+                onPress={() => confirmDelete(practice)}
                 style={styles.deleteButton}
               >
                 <Text style={styles.deleteButtonText}>×</Text>
               </TouchableOpacity>
             </View>
             
-            <View style={styles.locationStats}>
+            <View style={styles.practiceStats}>
               <Chip 
                 style={[styles.statChip, { backgroundColor: (colors.primaryLight || '#A4CDF0') + '20' }]}
                 textStyle={{ color: colors.primary || '#2E86AB', fontSize: 12 }}
@@ -245,10 +241,10 @@ const LocationsScreen = ({ navigation }) => {
               )}
             </View>
             
-            <View style={styles.locationActions}>
+            <View style={styles.practiceActions}>
               <Button
                 mode="outlined"
-                onPress={() => navigation.navigate('Inventory', { locationId: location.id })}
+                onPress={() => navigation.navigate('Inventory', { practiceId: practice.id })}
                 style={styles.actionButton}
                 textColor={colors.primary}
                 compact
@@ -257,7 +253,7 @@ const LocationsScreen = ({ navigation }) => {
               </Button>
               <Button
                 mode="outlined"
-                onPress={() => navigation.navigate('StockTransfer', { fromLocationId: location.id })}
+                onPress={() => navigation.navigate('StockTransfer', { fromPracticeId: practice.id })}
                 style={styles.actionButton}
                 textColor={colors.secondary}
                 compact
@@ -274,42 +270,43 @@ const LocationsScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <Searchbar
-        placeholder="Search locations..."
+        placeholder="Search practices..."
         onChangeText={setSearchQuery}
         value={searchQuery}
         style={styles.searchbar}
+        icon={() => null}
       />
       
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : filteredLocations.length === 0 ? (
+      ) : filteredPractices.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🏥</Text>
-          <Title style={styles.emptyTitle}>No Locations</Title>
+          <Text style={styles.emptyIcon}>🦷</Text>
+          <Title style={styles.emptyTitle}>No Practices</Title>
           <Paragraph style={styles.emptyText}>
-            Create operatories, clinics, or storage areas to organize your inventory
+            Create at least one practice to organize and manage your inventory
           </Paragraph>
           <Button
             mode="contained"
-            onPress={handleCreateLocation}
+            onPress={handleCreatePractice}
             style={styles.emptyButton}
             buttonColor={colors.primary}
           >
-            Create First Location
+            Create First Practice
           </Button>
         </View>
       ) : (
         <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
-          {filteredLocations.map(renderLocationCard)}
+          {filteredPractices.map(renderPracticeCard)}
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
       
       <TouchableOpacity
         style={styles.fab}
-        onPress={handleCreateLocation}
+        onPress={handleCreatePractice}
         activeOpacity={0.8}
       >
         <Text style={styles.fabText}>+</Text>
@@ -317,44 +314,44 @@ const LocationsScreen = ({ navigation }) => {
       
       <Portal>
         <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
-          <Dialog.Title>Delete Location</Dialog.Title>
+          <Dialog.Title>Delete Practice</Dialog.Title>
           <Dialog.Content>
-            <Paragraph>Are you sure you want to delete "{locationToDelete?.name}"?</Paragraph>
+            <Paragraph>Are you sure you want to delete "{practiceToDelete?.name}"?</Paragraph>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setDeleteDialogVisible(false)}>Cancel</Button>
-            <Button onPress={handleDeleteLocation} textColor={colors.danger}>Delete</Button>
+            <Button onPress={handleDeletePractice} textColor={colors.danger}>Delete</Button>
           </Dialog.Actions>
         </Dialog>
         
         <Dialog visible={editDialogVisible} onDismiss={() => setEditDialogVisible(false)} style={styles.editDialog}>
-          <Dialog.Title>{editingLocation ? 'Edit Location' : 'New Location'}</Dialog.Title>
+          <Dialog.Title>{editingPractice ? 'Edit Practice' : 'New Practice'}</Dialog.Title>
           <Dialog.Content>
             <View style={[styles.form, globalFormStyles.formContainer]}>
               <CustomTextInput
-                label="Location Name *"
-                value={locationForm.name}
-                onChangeText={(text) => setLocationForm(prev => ({ ...prev, name: text }))}
+                label="Practice Name *"
+                value={practiceForm.name}
+                onChangeText={(text) => setPracticeForm(prev => ({ ...prev, name: text }))}
                 style={[globalFormStyles.input, styles.input]}
                 mode="outlined"
-                placeholder="e.g., Operatory 1, Main Clinic"
+                placeholder="e.g., Downtown Dental Practice, Smith Family Dentistry"
               />
               
-              <Text style={styles.fieldLabel}>Location Type</Text>
+              <Text style={styles.fieldLabel}>Practice Type</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeSelector}>
-                {locationTypes.map((type) => (
+                {practiceTypes.map((type) => (
                   <TouchableOpacity
                     key={type.value}
-                    onPress={() => setLocationForm(prev => ({ ...prev, type: type.value }))}
+                    onPress={() => setPracticeForm(prev => ({ ...prev, type: type.value }))}
                     style={[
                       styles.typeChip,
-                      locationForm.type === type.value && styles.selectedTypeChip
+                      practiceForm.type === type.value && styles.selectedTypeChip
                     ]}
                   >
                     <Text style={styles.typeIcon}>{type.icon}</Text>
                     <Text style={[
                       styles.typeLabel,
-                      locationForm.type === type.value && styles.selectedTypeLabel
+                      practiceForm.type === type.value && styles.selectedTypeLabel
                     ]}>
                       {type.label}
                     </Text>
@@ -364,8 +361,8 @@ const LocationsScreen = ({ navigation }) => {
               
               <CustomTextInput
                 label="Description"
-                value={locationForm.description}
-                onChangeText={(text) => setLocationForm(prev => ({ ...prev, description: text }))}
+                value={practiceForm.description}
+                onChangeText={(text) => setPracticeForm(prev => ({ ...prev, description: text }))}
                 style={[globalFormStyles.input, styles.input]}
                 mode="outlined"
                 multiline
@@ -374,21 +371,21 @@ const LocationsScreen = ({ navigation }) => {
               />
               
               <CustomTextInput
-                label="Address/Location Details"
-                value={locationForm.address}
-                onChangeText={(text) => setLocationForm(prev => ({ ...prev, address: text }))}
+                label="Address/Practice Details"
+                value={practiceForm.address}
+                onChangeText={(text) => setPracticeForm(prev => ({ ...prev, address: text }))}
                 style={[globalFormStyles.input, styles.input]}
                 mode="outlined"
                 multiline
                 numberOfLines={2}
-                placeholder="Building, floor, room details"
+                placeholder="Address, building, floor details"
               />
             </View>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setEditDialogVisible(false)}>Cancel</Button>
-            <Button onPress={handleSaveLocation} textColor={colors.primary}>
-              {editingLocation ? 'Update' : 'Create'}
+            <Button onPress={handleSavePractice} textColor={colors.primary}>
+              {editingPractice ? 'Update' : 'Create'}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -415,43 +412,43 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.md,
   },
-  locationCard: {
+  practiceCard: {
     marginBottom: spacing.md,
     borderRadius: borderRadius.lg,
     ...shadows.medium,
   },
-  locationContent: {
+  practiceContent: {
     padding: spacing.md,
   },
-  locationHeader: {
+  practiceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.md,
   },
-  locationTitleRow: {
+  practiceTitleRow: {
     flexDirection: 'row',
     flex: 1,
   },
-  locationIcon: {
+  practiceIcon: {
     fontSize: 32,
     marginRight: spacing.md,
   },
-  locationInfo: {
+  practiceInfo: {
     flex: 1,
   },
-  locationName: {
+  practiceName: {
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
-  locationType: {
+  practiceType: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
-  locationDescription: {
+  practiceDescription: {
     fontSize: typography.fontSize.sm,
     color: colors.textTertiary,
   },
@@ -470,7 +467,7 @@ const styles = StyleSheet.create({
     color: colors.danger,
     lineHeight: 20,
   },
-  locationStats: {
+  practiceStats: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
@@ -479,7 +476,7 @@ const styles = StyleSheet.create({
   statChip: {
     height: 28,
   },
-  locationActions: {
+  practiceActions: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
@@ -588,4 +585,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LocationsScreen;
+export default PracticesScreen;

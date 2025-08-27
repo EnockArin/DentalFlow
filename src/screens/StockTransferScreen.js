@@ -17,37 +17,37 @@ import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
 import { collection, onSnapshot, updateDoc, doc, addDoc, Timestamp, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { addTransfer } from '../store/slices/locationsSlice';
+import { addTransfer } from '../store/slices/practicesSlice';
 import { colors, spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
 
 const StockTransferScreen = ({ navigation, route }) => {
   const dispatch = useDispatch();
-  const { locations } = useSelector((state) => state.locations);
+  const { practices } = useSelector((state) => state.practices);
   const { items } = useSelector((state) => state.inventory);
   const { user } = useSelector((state) => state.auth);
   
-  const fromLocationId = route?.params?.fromLocationId;
+  const fromPracticeId = route?.params?.fromPracticeId;
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState([]);
   const [transferQuantities, setTransferQuantities] = useState({});
-  const [destinationLocationId, setDestinationLocationId] = useState('');
+  const [destinationPracticeId, setDestinationPracticeId] = useState('');
   const [transferNotes, setTransferNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [confirmDialogVisible, setConfirmDialogVisible] = useState(false);
 
-  // Get available source locations (locations with inventory)
-  const sourceLocations = locations.filter(loc => 
-    items.some(item => item.locationId === loc.id)
+  // Get available source practices (practices with inventory)
+  const sourcePractices = practices.filter(practice => 
+    items.some(item => item.practiceId === practice.id)
   );
 
-  // Get current source location
-  const [sourceLocationId, setSourceLocationId] = useState(fromLocationId || '');
+  // Get current source practice
+  const [sourcePracticeId, setSourcePracticeId] = useState(fromPracticeId || '');
   
-  // Get items available at the selected source location
+  // Get items available at the selected source practice
   const sourceItems = items.filter(item => 
-    item.locationId === sourceLocationId &&
+    item.practiceId === sourcePracticeId &&
     item.currentQuantity > 0
   );
 
@@ -57,12 +57,12 @@ const StockTransferScreen = ({ navigation, route }) => {
     (item.barcode || '').toLowerCase().includes((searchQuery || '').toLowerCase())
   );
 
-  // Get available destination locations (exclude source location)
-  const destinationLocations = locations.filter(loc => loc.id !== sourceLocationId);
+  // Get available destination practices (exclude source practice)
+  const destinationPractices = practices.filter(practice => practice.id !== sourcePracticeId);
 
-  const getLocationName = (locationId) => {
-    const location = locations.find(loc => loc.id === locationId);
-    return location ? location.name : 'Unknown Location';
+  const getPracticeName = (practiceId) => {
+    const practice = practices.find(practice => practice.id === practiceId);
+    return practice ? practice.name : 'Unknown Practice';
   };
 
   const handleItemToggle = (item) => {
@@ -93,13 +93,13 @@ const StockTransferScreen = ({ navigation, route }) => {
   };
 
   const validateTransfer = () => {
-    if (!sourceLocationId) {
-      Alert.alert('Required Field', 'Please select a source location');
+    if (!sourcePracticeId) {
+      Alert.alert('Required Field', 'Please select a source practice');
       return false;
     }
     
-    if (!destinationLocationId) {
-      Alert.alert('Required Field', 'Please select a destination location');
+    if (!destinationPracticeId) {
+      Alert.alert('Required Field', 'Please select a destination practice');
       return false;
     }
     
@@ -131,10 +131,10 @@ const StockTransferScreen = ({ navigation, route }) => {
     try {
       // Create transfer record
       const transferData = {
-        fromLocationId: sourceLocationId,
-        fromLocationName: getLocationName(sourceLocationId),
-        toLocationId: destinationLocationId,
-        toLocationName: getLocationName(destinationLocationId),
+        fromPracticeId: sourcePracticeId,
+        fromPracticeName: getPracticeName(sourcePracticeId),
+        toPracticeId: destinationPracticeId,
+        toPracticeName: getPracticeName(destinationPracticeId),
         items: selectedItems.map(item => ({
           id: item.id,
           productName: item.productName,
@@ -167,7 +167,7 @@ const StockTransferScreen = ({ navigation, route }) => {
           collection(db, 'inventory'),
           where('productName', '==', item.productName),
           where('barcode', '==', item.barcode || ''),
-          where('locationId', '==', destinationLocationId),
+          where('practiceId', '==', destinationPracticeId),
           where('practiceId', '==', user?.uid)
         );
 
@@ -189,8 +189,8 @@ const StockTransferScreen = ({ navigation, route }) => {
               await addDoc(collection(db, 'inventory'), {
                 ...item,
                 id: undefined, // Remove the old ID
-                locationId: destinationLocationId,
-                locationName: getLocationName(destinationLocationId),
+                practiceId: destinationPracticeId,
+                practiceName: getPracticeName(destinationPracticeId),
                 currentQuantity: transferQty,
                 createdAt: Timestamp.now(),
                 updatedAt: Timestamp.now(),
@@ -219,26 +219,26 @@ const StockTransferScreen = ({ navigation, route }) => {
     }
   };
 
-  const renderLocationSelector = (title, selectedId, onSelect, locationList) => (
+  const renderPracticeSelector = (title, selectedId, onSelect, practiceList) => (
     <View style={styles.selectorContainer}>
       <Text style={styles.selectorTitle}>{title}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.locationScroll}>
-        {locationList.map((location) => (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.practiceScroll}>
+        {practiceList.map((practice) => (
           <TouchableOpacity
-            key={location.id}
-            onPress={() => onSelect(location.id)}
+            key={practice.id}
+            onPress={() => onSelect(practice.id)}
             style={[
-              styles.locationChip,
-              selectedId === location.id && styles.selectedLocationChip
+              styles.practiceChip,
+              selectedId === practice.id && styles.selectedPracticeChip
             ]}
           >
             <Text style={[
-              styles.locationLabel,
-              selectedId === location.id && styles.selectedLocationLabel
+              styles.practiceLabel,
+              selectedId === practice.id && styles.selectedPracticeLabel
             ]}>
-              {location.name}
+              {practice.name}
             </Text>
-            <Text style={styles.locationTypeLabel}>{location.type}</Text>
+            <Text style={styles.practiceTypeLabel}>{practice.type}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -307,24 +307,24 @@ const StockTransferScreen = ({ navigation, route }) => {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Source Location Selection */}
-        {renderLocationSelector(
-          'From Location', 
-          sourceLocationId, 
-          setSourceLocationId, 
-          sourceLocations
+        {/* Source Practice Selection */}
+        {renderPracticeSelector(
+          'From Practice', 
+          sourcePracticeId, 
+          setSourcePracticeId, 
+          sourcePractices
         )}
 
-        {/* Destination Location Selection */}
-        {sourceLocationId && renderLocationSelector(
-          'To Location', 
-          destinationLocationId, 
-          setDestinationLocationId, 
-          destinationLocations
+        {/* Destination Practice Selection */}
+        {sourcePracticeId && renderPracticeSelector(
+          'To Practice', 
+          destinationPracticeId, 
+          setDestinationPracticeId, 
+          destinationPractices
         )}
 
         {/* Items Selection */}
-        {sourceLocationId && (
+        {sourcePracticeId && (
           <View style={styles.itemsSection}>
             <Text style={styles.sectionTitle}>Select Items to Transfer</Text>
             
@@ -339,7 +339,7 @@ const StockTransferScreen = ({ navigation, route }) => {
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>
                   {sourceItems.length === 0 
-                    ? 'No items available at selected location'
+                    ? 'No items available at selected practice'
                     : 'No items match your search'
                   }
                 </Text>
@@ -372,7 +372,7 @@ const StockTransferScreen = ({ navigation, route }) => {
       </ScrollView>
 
       {/* Transfer Summary & Button */}
-      {selectedItems.length > 0 && destinationLocationId && (
+      {selectedItems.length > 0 && destinationPracticeId && (
         <View style={styles.bottomContainer}>
           <Card style={styles.summaryCard}>
             <Card.Content style={styles.summaryContent}>
@@ -386,11 +386,11 @@ const StockTransferScreen = ({ navigation, route }) => {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>From:</Text>
-                <Text style={styles.summaryValue}>{getLocationName(sourceLocationId)}</Text>
+                <Text style={styles.summaryValue}>{getPracticeName(sourcePracticeId)}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>To:</Text>
-                <Text style={styles.summaryValue}>{getLocationName(destinationLocationId)}</Text>
+                <Text style={styles.summaryValue}>{getPracticeName(destinationPracticeId)}</Text>
               </View>
             </Card.Content>
           </Card>
@@ -415,7 +415,7 @@ const StockTransferScreen = ({ navigation, route }) => {
           <Dialog.Content>
             <Paragraph>
               Transfer {selectedItems.length} items ({getTotalItemsToTransfer()} total quantity) 
-              from {getLocationName(sourceLocationId)} to {getLocationName(destinationLocationId)}?
+              from {getPracticeName(sourcePracticeId)} to {getPracticeName(destinationPracticeId)}?
             </Paragraph>
             {transferNotes.trim() && (
               <Paragraph style={styles.dialogNotes}>
@@ -454,10 +454,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     marginTop: spacing.md,
   },
-  locationScroll: {
+  practiceScroll: {
     marginBottom: spacing.sm,
   },
-  locationChip: {
+  practiceChip: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
@@ -468,19 +468,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
-  selectedLocationChip: {
+  selectedPracticeChip: {
     backgroundColor: colors.primaryLight + '30',
     borderColor: colors.primary,
   },
-  locationLabel: {
+  practiceLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     color: colors.textPrimary,
   },
-  selectedLocationLabel: {
+  selectedPracticeLabel: {
     color: colors.primary,
   },
-  locationTypeLabel: {
+  practiceTypeLabel: {
     fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     marginTop: 2,

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Animated, TouchableOpacity, Image, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, Text } from 'react-native';
 import { 
   Button, 
   Card, 
   Title,
-  HelperText,
   Divider,
   Paragraph,
   Surface,
@@ -12,7 +11,8 @@ import {
   TextInput
 } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
-import LocationPicker from '../components/common/LocationPicker';
+import PracticePicker from '../components/common/PracticePicker';
+import PracticeEnforcement from '../components/common/PracticeEnforcement';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { addDoc, collection, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -23,7 +23,7 @@ import { globalFormStyles } from '../styles/globalFormFixes';
 
 const ItemDetailScreen = ({ navigation, route }) => {
   const { user } = useSelector((state) => state.auth);
-  const { locations } = useSelector((state) => state.locations);
+  const { practices } = useSelector((state) => state.practices);
   const item = route.params?.item;
   const scannedBarcode = route.params?.barcode;
   const isEditing = !!item;
@@ -33,8 +33,8 @@ const ItemDetailScreen = ({ navigation, route }) => {
     barcode: '',
     currentQuantity: '',
     minStockLevel: '',
-    locationId: '',
-    locationName: '',
+    practiceId: '',
+    practiceName: '',
     cost: '',
     description: '',
     imageUri: null,
@@ -44,8 +44,6 @@ const ItemDetailScreen = ({ navigation, route }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(30));
 
   // Initialize form data when editing
   useEffect(() => {
@@ -55,8 +53,8 @@ const ItemDetailScreen = ({ navigation, route }) => {
         barcode: item.barcode || '',
         currentQuantity: '', // Leave blank when editing since we're adding stock
         minStockLevel: item.minStockLevel?.toString() || '',
-        locationId: item.locationId || '',
-        locationName: item.locationName || item.location || '',
+        practiceId: item.practiceId || '',
+        practiceName: item.practiceName || item.practice || '',
         cost: item.cost?.toString() || '',
         description: item.description || '',
         imageUri: item.imageUri || null,
@@ -112,6 +110,10 @@ const ItemDetailScreen = ({ navigation, route }) => {
       newErrors.cost = 'Cost must be a valid positive number';
     }
 
+    if (!formData.practiceId) {
+      newErrors.practiceId = 'Please select a practice';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -130,9 +132,9 @@ const ItemDetailScreen = ({ navigation, route }) => {
         barcode: (formData.barcode || '').trim(),
         currentQuantity: parseInt(formData.currentQuantity) || 0,
         minStockLevel: parseInt(formData.minStockLevel) || 0,
-        locationId: formData.locationId || null,
-        locationName: (formData.locationName || '').trim(),
-        location: (formData.locationName || '').trim(), // Legacy field for compatibility
+        practiceId: formData.practiceId || null,
+        practiceName: (formData.practiceName || '').trim(),
+        practice: (formData.practiceName || '').trim(), // Legacy field for compatibility
         cost: parseFloat(formData.cost) || 0,
         description: (formData.description || '').trim(),
         imageUri: formData.imageUri || null,
@@ -197,7 +199,8 @@ const ItemDetailScreen = ({ navigation, route }) => {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <PracticeEnforcement>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <Animated.View style={[
         styles.animatedContainer,
         {
@@ -259,9 +262,11 @@ const ItemDetailScreen = ({ navigation, route }) => {
                 spellCheck={false}
                 right={null}
               />
-              <HelperText type="error" visible={!!errors.productName} style={styles.helperText}>
-                {errors.productName}
-              </HelperText>
+              {errors.productName && (
+                <Text style={styles.errorText}>
+                  {errors.productName}
+                </Text>
+              )}
 
               <CustomTextInput
                 label="Barcode (Optional)"
@@ -285,9 +290,11 @@ const ItemDetailScreen = ({ navigation, route }) => {
                   />
                 }
               />
-              <HelperText type="error" visible={!!errors.barcode} style={styles.helperText}>
-                {errors.barcode}
-              </HelperText>
+              {errors.barcode && (
+                <Text style={styles.errorText}>
+                  {errors.barcode}
+                </Text>
+              )}
             </View>
 
             {/* Quantity Information */}
@@ -312,13 +319,15 @@ const ItemDetailScreen = ({ navigation, route }) => {
                     spellCheck={false}
                     right={null}
                   />
-                  <HelperText type="error" visible={!!errors.currentQuantity} style={styles.helperText}>
-                    {errors.currentQuantity}
-                  </HelperText>
+                  {errors.currentQuantity && (
+                    <Text style={styles.errorText}>
+                      {errors.currentQuantity}
+                    </Text>
+                  )}
                   {isEditing && (
-                    <HelperText type="info" style={styles.helperText}>
+                    <Text style={styles.infoText}>
                       Current stock: {item.currentQuantity || 0}. Enter amount to add.
-                    </HelperText>
+                    </Text>
                   )}
                 </View>
 
@@ -339,30 +348,37 @@ const ItemDetailScreen = ({ navigation, route }) => {
                     spellCheck={false}
                     right={null}
                   />
-                  <HelperText type="error" visible={!!errors.minStockLevel} style={styles.helperText}>
-                    {errors.minStockLevel}
-                  </HelperText>
+                  {errors.minStockLevel && (
+                    <Text style={styles.errorText}>
+                      {errors.minStockLevel}
+                    </Text>
+                  )}
                 </View>
               </View>
             </View>
 
-            {/* Location & Expiry */}
+            {/* Practice & Expiry */}
             <View style={styles.section}>
-              <Title style={styles.sectionTitle}>Location & Expiry</Title>
+              <Title style={styles.sectionTitle}>Practice & Expiry</Title>
               <Divider style={styles.sectionDivider} />
               
-              <LocationPicker
-                value={formData.locationId}
-                onSelect={(locationId, locationName) => 
+              <PracticePicker
+                value={formData.practiceId}
+                onSelect={(practiceId, practiceName) => 
                   setFormData(prev => ({ 
                     ...prev, 
-                    locationId, 
-                    locationName 
+                    practiceId, 
+                    practiceName 
                   }))
                 }
-                placeholder="Select storage location (optional)"
+                placeholder="Select practice *"
                 style={styles.input}
               />
+              {errors.practiceId && (
+                <Text style={styles.errorText}>
+                  {errors.practiceId}
+                </Text>
+              )}
 
               <CustomTextInput
                 label="Cost per Unit (£)"
@@ -382,9 +398,11 @@ const ItemDetailScreen = ({ navigation, route }) => {
                 spellCheck={false}
                 right={null}
               />
-              <HelperText type="error" visible={!!errors.cost} style={styles.helperText}>
-                {errors.cost}
-              </HelperText>
+              {errors.cost && (
+                <Text style={styles.errorText}>
+                  {errors.cost}
+                </Text>
+              )}
 
               <CustomTextInput
                 label="Description (Optional)"
@@ -487,6 +505,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
         </View>
       </Animated.View>
     </ScrollView>
+    </PracticeEnforcement>
   );
 };
 
@@ -627,6 +646,18 @@ const styles = StyleSheet.create({
   dateValue: {
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.medium,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: typography.fontSize.sm,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  infoText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.sm,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
   },
   // New field styles
   descriptionInput: {

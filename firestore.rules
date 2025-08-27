@@ -48,7 +48,15 @@ service cloud.firestore {
                        resource.data.practiceId == request.auth.uid;
     }
 
-    // LOCATIONS COLLECTION
+    // PRACTICES COLLECTION - NEW
+    match /practices/{practiceId} {
+      allow read, write: if isAuthenticated() && 
+                           resource.data.practiceId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.practiceId == request.auth.uid;
+    }
+
+    // LOCATIONS COLLECTION (Legacy - can be removed after migration)
     match /locations/{locationId} {
       allow read, write: if isAuthenticated() && 
                            resource.data.practiceId == request.auth.uid;

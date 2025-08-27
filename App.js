@@ -14,6 +14,11 @@ const theme = {
 function App() {
   useEffect(() => {
     console.log('DentalFlow app started');
+    // Disable Object.freeze in development to prevent animation freezing
+    if (__DEV__) {
+      const originalFreeze = Object.freeze;
+      Object.freeze = (obj) => obj;
+    }
   }, []);
 
   return (

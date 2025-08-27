@@ -16,6 +16,7 @@ import {
   TextInput
 } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
+import PracticeEnforcement from '../components/common/PracticeEnforcement';
 import { useDispatch, useSelector } from 'react-redux';
 import { deleteDoc, doc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -27,10 +28,11 @@ const InventoryListScreen = ({ navigation, route }) => {
   const dispatch = useDispatch();
   const { items, loading } = useSelector((state) => state.inventory);
   const { user } = useSelector((state) => state.auth);
-  const { locations } = useSelector((state) => state.locations);
+  const { practices } = useSelector((state) => state.practices);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState(route.params?.filter || 'all');
-  const [selectedLocationId, setSelectedLocationId] = useState(route.params?.locationId || '');
+  const [selectedPracticeId, setSelectedPracticeId] = useState(route.params?.practiceId || '');
   const showCheckoutMode = route.params?.showCheckoutMode || false;
   const [fadeAnim] = useState(new Animated.Value(0));
   
@@ -174,12 +176,12 @@ const InventoryListScreen = ({ navigation, route }) => {
       // Text search filter
       const matchesSearch = item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.barcode?.includes(searchQuery) ||
-        (item.locationName || item.location || '').toLowerCase().includes(searchQuery.toLowerCase());
+        (item.practiceName || item.practice || '').toLowerCase().includes(searchQuery.toLowerCase());
       
-      // Location filter
-      const matchesLocation = !selectedLocationId || item.locationId === selectedLocationId;
+      // Practice filter
+      const matchesPractice = !selectedPracticeId || item.practiceId === selectedPracticeId;
       
-      return matchesSearch && matchesLocation;
+      return matchesSearch && matchesPractice;
     });
 
     switch (filter) {
@@ -257,17 +259,17 @@ const InventoryListScreen = ({ navigation, route }) => {
       }
 
       // CSV Header
-      let csvContent = 'Product Name,Barcode,Current Quantity,Min Stock Level,Location,Expiry Date,Status\n';
+      let csvContent = 'Product Name,Barcode,Current Quantity,Min Stock Level,Practice,Expiry Date,Status\n';
       
       // CSV Data
       filteredItems.forEach(item => {
         const status = getItemStatus(item);
         const escapedName = `"${item.productName.replace(/"/g, '""')}"`;
         const barcode = item.barcode || '';
-        const location = item.locationName || item.location || '';
+        const practice = item.practiceName || item.practice || '';
         const expiryDate = formatExpiryDate(item.expiryDate);
         
-        csvContent += `${escapedName},${barcode},${item.currentQuantity},${item.minStockLevel},"${location}","${expiryDate}","${status.label}"\n`;
+        csvContent += `${escapedName},${barcode},${item.currentQuantity},${item.minStockLevel},"${practice}","${expiryDate}","${status.label}"\n`;
       });
 
       // Generate filename with timestamp
@@ -313,12 +315,6 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Header Row */}
               <View style={styles.itemHeader}>
                 <View style={styles.itemTitleSection}>
-                  <TouchableOpacity
-                    icon={status.icon}
-                    size={24}
-                    
-                    style={styles.statusIcon}
-                  />
                   <View style={styles.titleContainer}>
                     <Title style={styles.itemTitle} numberOfLines={1}>
                       {item.productName}
@@ -337,21 +333,18 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Info Row */}
               <View style={styles.itemInfo}>
                 <View style={styles.infoItem}>
-                  <TouchableOpacity  size={16}  style={styles.infoIcon} />
                   <Text style={styles.infoText}>
                     {item.currentQuantity}/{item.minStockLevel}
                   </Text>
                 </View>
                 
                 <View style={styles.infoItem}>
-                  <TouchableOpacity  size={16}  style={styles.infoIcon} />
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {item.locationName || item.location || 'No location'}
+                    {item.practiceName || item.practice || 'No practice'}
                   </Text>
                 </View>
                 
                 <View style={styles.infoItem}>
-                  <TouchableOpacity  size={16}  style={styles.infoIcon} />
                   <Text style={[styles.infoText, styles.expiryText]} numberOfLines={1}>
                     {formatExpiryDate(item.expiryDate)}
                   </Text>
@@ -368,12 +361,6 @@ const InventoryListScreen = ({ navigation, route }) => {
                 >
                   {status.label}
                 </Chip>
-                <TouchableOpacity
-                  
-                  size={20}
-                  
-                  style={styles.chevronIcon}
-                />
               </View>
             </Card.Content>
           </Card>
@@ -393,13 +380,13 @@ const InventoryListScreen = ({ navigation, route }) => {
 
   const filteredItems = getFilteredItems();
 
-  // Count items for filter chips (considering location filter)
-  const locationFilteredItems = selectedLocationId 
-    ? items.filter(item => item.locationId === selectedLocationId)
+  // Count items for filter chips (considering practice filter)
+  const practiceFilteredItems = selectedPracticeId 
+    ? items.filter(item => item.practiceId === selectedPracticeId)
     : items;
     
-  const lowStockCount = locationFilteredItems.filter(item => item.currentQuantity <= item.minStockLevel).length;
-  const expiringCount = locationFilteredItems.filter(item => {
+  const lowStockCount = practiceFilteredItems.filter(item => item.currentQuantity <= item.minStockLevel).length;
+  const expiringCount = practiceFilteredItems.filter(item => {
     if (!item.expiryDate) return false;
     const daysUntilExpiry = Math.ceil(
       (item.expiryDate - new Date()) / (1000 * 60 * 60 * 24)
@@ -408,52 +395,53 @@ const InventoryListScreen = ({ navigation, route }) => {
   }).length;
 
   return (
-    <View style={styles.container}>
+    <PracticeEnforcement>
+      <View style={styles.container}>
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Searchbar
-          placeholder="Search by name, barcode, location..."
+          placeholder="Search by name, barcode, practice..."
           onChangeText={setSearchQuery}
           value={searchQuery}
           style={styles.searchbar}
           inputStyle={styles.searchInput}
-          
+          icon={() => null}
         />
       </View>
       
-      {/* Location Filter */}
-      {locations.length > 0 && (
-        <View style={styles.locationContainer}>
-          <Text style={styles.locationLabel}>Filter by Location:</Text>
-          <View style={styles.locationScroll}>
+      {/* Practice Filter */}
+      {practices.length > 0 && (
+        <View style={styles.practiceContainer}>
+          <Text style={styles.practiceLabel}>Filter by Practice:</Text>
+          <View style={styles.practiceScroll}>
             <TouchableOpacity
               style={[
-                styles.locationChip,
-                !selectedLocationId && styles.selectedLocationChip
+                styles.practiceChip,
+                !selectedPracticeId && styles.selectedPracticeChip
               ]}
-              onPress={() => setSelectedLocationId('')}
+              onPress={() => setSelectedPracticeId('')}
             >
               <Text style={[
-                styles.locationChipText,
-                !selectedLocationId && styles.selectedLocationChipText
+                styles.practiceChipText,
+                !selectedPracticeId && styles.selectedPracticeChipText
               ]}>
-                All Locations
+                All Practices
               </Text>
             </TouchableOpacity>
-            {locations.map((location) => (
+            {practices.map((practice) => (
               <TouchableOpacity
-                key={location.id}
+                key={practice.id}
                 style={[
-                  styles.locationChip,
-                  selectedLocationId === location.id && styles.selectedLocationChip
+                  styles.practiceChip,
+                  selectedPracticeId === practice.id && styles.selectedPracticeChip
                 ]}
-                onPress={() => setSelectedLocationId(location.id)}
+                onPress={() => setSelectedPracticeId(practice.id)}
               >
                 <Text style={[
-                  styles.locationChipText,
-                  selectedLocationId === location.id && styles.selectedLocationChipText
+                  styles.practiceChipText,
+                  selectedPracticeId === practice.id && styles.selectedPracticeChipText
                 ]}>
-                  {location.name}
+                  {practice.name}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -464,16 +452,14 @@ const InventoryListScreen = ({ navigation, route }) => {
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
         <Chip
-          selected={filter === 'all'}
           onPress={() => setFilter('all')}
           style={[styles.filterChip, filter === 'all' && styles.selectedChip]}
           textStyle={filter === 'all' ? styles.selectedChipText : styles.chipText}
           mode={filter === 'all' ? 'flat' : 'outlined'}
         >
-          All ({locationFilteredItems.length})
+          All ({practiceFilteredItems.length})
         </Chip>
         <Chip
-          selected={filter === 'lowStock'}
           onPress={() => setFilter('lowStock')}
           style={[styles.filterChip, filter === 'lowStock' && styles.selectedChip]}
           textStyle={filter === 'lowStock' ? styles.selectedChipText : styles.chipText}
@@ -482,7 +468,6 @@ const InventoryListScreen = ({ navigation, route }) => {
           Low Stock ({lowStockCount})
         </Chip>
         <Chip
-          selected={filter === 'expiring'}
           onPress={() => setFilter('expiring')}
           style={[styles.filterChip, filter === 'expiring' && styles.selectedChip]}
           textStyle={filter === 'expiring' ? styles.selectedChipText : styles.chipText}
@@ -508,12 +493,6 @@ const InventoryListScreen = ({ navigation, route }) => {
       {/* Content */}
       {filteredItems.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <TouchableOpacity
-            icon={searchQuery ? 'magnify-close' : 'package-variant-closed'}
-            size={64}
-            
-            style={styles.emptyIcon}
-          />
           <Title style={styles.emptyTitle}>
             {searchQuery ? 'No items found' : 'No inventory items'}
           </Title>
@@ -551,7 +530,7 @@ const InventoryListScreen = ({ navigation, route }) => {
         onPress={() => setCheckoutOptionsVisible(true)}
         activeOpacity={0.8}
       >
-        <Text style={styles.fabIcon}>📦</Text>
+        <Text style={styles.fabIcon}>-</Text>
         <Text style={styles.fabLabel}>Checkout</Text>
       </TouchableOpacity>
 
@@ -568,12 +547,6 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderContent}>
-                  <TouchableOpacity
-                    
-                    size={32}
-                    
-                    style={styles.modalHeaderIcon}
-                  />
                   <View style={styles.modalHeaderText}>
                     <Title style={styles.modalTitle}>Quick Actions</Title>
                     <Paragraph style={styles.modalSubtitle}>
@@ -600,14 +573,12 @@ const InventoryListScreen = ({ navigation, route }) => {
                   mode="outlined"
                   keyboardType="numeric"
                   style={[styles.quantityInput, globalFormStyles.hideValidationIndicators]}
-                  left={<TextInput.Icon  />}
                   outlineColor={colors.borderLight}
                   activeOutlineColor={colors.primary}
                   autoComplete="off"
                   textContentType="none"
                   autoCorrect={false}
                   spellCheck={false}
-                  right={null}
                 />
               </View>
 
@@ -695,9 +666,6 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderContent}>
-                  <View style={styles.modalHeaderIcon}>
-                    <Text style={styles.checkoutIcon}>📤</Text>
-                  </View>
                   <View style={styles.modalHeaderText}>
                     <Title style={styles.modalTitle}>Checkout Options</Title>
                     <Paragraph style={styles.modalSubtitle}>
@@ -716,16 +684,12 @@ const InventoryListScreen = ({ navigation, route }) => {
                     navigation.navigate('Scanner');
                   }}
                 >
-                  <View style={styles.optionIconContainer}>
-                    <Text style={styles.optionIcon}>📱</Text>
-                  </View>
                   <View style={styles.optionContent}>
                     <Title style={styles.optionTitle}>Scan Barcode</Title>
                     <Paragraph style={styles.optionDescription}>
                       Use camera to scan item barcodes for quick checkout
                     </Paragraph>
                   </View>
-                  <Text style={styles.optionChevron}>›</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -735,16 +699,12 @@ const InventoryListScreen = ({ navigation, route }) => {
                     navigation.navigate('Checkout');
                   }}
                 >
-                  <View style={styles.optionIconContainer}>
-                    <Text style={styles.optionIcon}>📋</Text>
-                  </View>
                   <View style={styles.optionContent}>
                     <Title style={styles.optionTitle}>Manual Checkout</Title>
                     <Paragraph style={styles.optionDescription}>
                       Browse inventory list and manually select items to checkout
                     </Paragraph>
                   </View>
-                  <Text style={styles.optionChevron}>›</Text>
                 </TouchableOpacity>
               </View>
 
@@ -774,9 +734,6 @@ const InventoryListScreen = ({ navigation, route }) => {
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderContent}>
-                  <View style={styles.modalHeaderIcon}>
-                    <Text style={styles.addItemIcon}>📦</Text>
-                  </View>
                   <View style={styles.modalHeaderText}>
                     <Title style={styles.modalTitle}>Add Item</Title>
                     <Paragraph style={styles.modalSubtitle}>
@@ -795,16 +752,12 @@ const InventoryListScreen = ({ navigation, route }) => {
                     navigation.navigate('Scanner');
                   }}
                 >
-                  <View style={styles.optionIconContainer}>
-                    <Text style={styles.optionIcon}>📱</Text>
-                  </View>
                   <View style={styles.optionContent}>
                     <Title style={styles.optionTitle}>Scan Barcode</Title>
                     <Paragraph style={styles.optionDescription}>
                       Use camera to scan barcode and auto-fill item details
                     </Paragraph>
                   </View>
-                  <Text style={styles.optionChevron}>›</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -814,16 +767,12 @@ const InventoryListScreen = ({ navigation, route }) => {
                     navigation.navigate('ItemDetail');
                   }}
                 >
-                  <View style={styles.optionIconContainer}>
-                    <Text style={styles.optionIcon}>✏️</Text>
-                  </View>
                   <View style={styles.optionContent}>
                     <Title style={styles.optionTitle}>Manual Entry</Title>
                     <Paragraph style={styles.optionDescription}>
                       Manually enter all item details using a form
                     </Paragraph>
                   </View>
-                  <Text style={styles.optionChevron}>›</Text>
                 </TouchableOpacity>
               </View>
 
@@ -840,6 +789,7 @@ const InventoryListScreen = ({ navigation, route }) => {
         </View>
       </Modal>
     </View>
+    </PracticeEnforcement>
   );
 };
 
@@ -927,10 +877,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  statusIcon: {
-    margin: 0,
-    marginRight: spacing.sm,
-  },
   titleContainer: {
     flex: 1,
   },
@@ -955,13 +901,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     flex: 1,
-    marginRight: spacing.xs,
-  },
-  infoIcon: {
-    margin: 0,
     marginRight: spacing.xs,
   },
   infoText: {
@@ -975,7 +915,7 @@ const styles = StyleSheet.create({
   },
   statusRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
   },
   statusChip: {
@@ -984,9 +924,6 @@ const styles = StyleSheet.create({
   statusChipText: {
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.medium,
-  },
-  chevronIcon: {
-    margin: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -1004,9 +941,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xxl,
-  },
-  emptyIcon: {
-    marginBottom: spacing.lg,
   },
   emptyTitle: {
     fontSize: typography.fontSize.xl,
@@ -1083,11 +1017,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  modalHeaderIcon: {
-    margin: 0,
-    marginRight: spacing.md,
-    backgroundColor: colors.primaryLight + '20',
-  },
   modalHeaderText: {
     flex: 1,
   },
@@ -1158,10 +1087,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   // Checkout Options Modal Styles
-  checkoutIcon: {
-    fontSize: 24,
-    textAlign: 'center',
-  },
   checkoutOptionsContainer: {
     gap: spacing.sm,
     marginBottom: spacing.lg,
@@ -1176,10 +1101,6 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
   },
   // Add Item Options Modal Styles
-  addItemIcon: {
-    fontSize: 24,
-    textAlign: 'center',
-  },
   addItemOptionsContainer: {
     gap: spacing.sm,
     marginBottom: spacing.lg,
@@ -1192,18 +1113,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.borderLight,
-  },
-  optionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primaryLight + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
-  },
-  optionIcon: {
-    fontSize: 24,
   },
   optionContent: {
     flex: 1,
@@ -1219,28 +1128,23 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: typography.lineHeight.relaxed * typography.fontSize.sm,
   },
-  optionChevron: {
-    fontSize: 24,
-    color: colors.textLight,
-    marginLeft: spacing.sm,
-  },
-  // Location Filter Styles
-  locationContainer: {
+  // Practice Filter Styles
+  practiceContainer: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  locationLabel: {
+  practiceLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     color: colors.textPrimary,
     marginBottom: spacing.sm,
   },
-  locationScroll: {
+  practiceScroll: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  locationChip: {
+  practiceChip: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.sm,
@@ -1249,15 +1153,15 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     marginBottom: spacing.xs,
   },
-  selectedLocationChip: {
+  selectedPracticeChip: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  locationChipText: {
+  practiceChipText: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
   },
-  selectedLocationChipText: {
+  selectedPracticeChipText: {
     color: colors.white,
     fontWeight: typography.fontWeight.medium,
   },

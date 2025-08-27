@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Animated, Text } from 'react-native';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Text } from 'react-native';
 import { Button, Card, Title, Paragraph, TextInput } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
@@ -15,26 +15,10 @@ const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(50));
   
   const dispatch = useDispatch();
   const { loading, error } = useSelector((state) => state.auth);
 
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -83,20 +67,12 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <GradientBackground colors={[colors.primary, colors.primaryDark]}>
+    <GradientBackground gradientColors={[colors.primary, colors.primaryDark]}>
       <KeyboardAvoidingView 
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Animated.View 
-          style={[
-            styles.content,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
+        <View style={styles.content}>
           {/* Logo Section */}
           <View style={styles.logoSection}>
             <Title style={styles.title}>DentalFlow</Title>
@@ -157,9 +133,9 @@ const LoginScreen = ({ navigation }) => {
               </View>
 
               {error && (
-                <Animated.View style={styles.errorContainer}>
-                  <Paragraph style={styles.errorText}>{error}</Paragraph>
-                </Animated.View>
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
               )}
               
               <Button
@@ -208,7 +184,7 @@ const LoginScreen = ({ navigation }) => {
               Secure • Fast
             </Paragraph>
           </View>
-        </Animated.View>
+        </View>
       </KeyboardAvoidingView>
     </GradientBackground>
   );

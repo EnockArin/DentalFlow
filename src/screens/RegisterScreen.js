@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Animated, ScrollView, Text } from 'react-native';
-import { Button, Card, Title, Paragraph, HelperText, TextInput } from 'react-native-paper';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
+import { Button, Card, Title, Paragraph, TextInput } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
 import { useDispatch, useSelector } from 'react-redux';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
@@ -22,26 +22,10 @@ const RegisterScreen = ({ navigation }) => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(50));
   
   const dispatch = useDispatch();
   const { loading } = useSelector((state) => state.auth);
 
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
 
   const validateForm = () => {
     const newErrors = {};
@@ -156,7 +140,7 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   return (
-    <GradientBackground colors={[colors.primary, colors.primaryDark]}>
+    <GradientBackground gradientColors={[colors.primary, colors.primaryDark]}>
       <KeyboardAvoidingView 
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -165,15 +149,7 @@ const RegisterScreen = ({ navigation }) => {
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View 
-            style={[
-              styles.content,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
-          >
+          <View style={styles.content}>
             {/* Logo Section */}
             <View style={styles.logoSection}>
               <View style={styles.logoContainer}>
@@ -213,9 +189,11 @@ const RegisterScreen = ({ navigation }) => {
                         error={!!errors.firstName}
                         right={null}
                       />
-                      <HelperText type="error" visible={!!errors.firstName} style={styles.helperText}>
-                        {errors.firstName}
-                      </HelperText>
+                      {!!errors.firstName && (
+                        <Text style={styles.errorText}>
+                          {errors.firstName}
+                        </Text>
+                      )}
                     </View>
                     
                     <View style={styles.nameField}>
@@ -235,9 +213,11 @@ const RegisterScreen = ({ navigation }) => {
                         error={!!errors.lastName}
                         right={null}
                       />
-                      <HelperText type="error" visible={!!errors.lastName} style={styles.helperText}>
-                        {errors.lastName}
-                      </HelperText>
+                      {!!errors.lastName && (
+                        <Text style={styles.errorText}>
+                          {errors.lastName}
+                        </Text>
+                      )}
                     </View>
                   </View>
 
@@ -259,9 +239,11 @@ const RegisterScreen = ({ navigation }) => {
                     error={!!errors.email}
                     right={null}
                   />
-                  <HelperText type="error" visible={!!errors.email} style={styles.helperText}>
-                    {errors.email}
-                  </HelperText>
+                  {!!errors.email && (
+                    <Text style={styles.errorText}>
+                      {errors.email}
+                    </Text>
+                  )}
                   
                   {/* Password Field */}
                   <View style={styles.inputWithIcon}>
@@ -290,9 +272,19 @@ const RegisterScreen = ({ navigation }) => {
                       </Text>
                     </View>
                   </View>
-                  <HelperText type="error" visible={!!errors.password} style={styles.helperText}>
-                    {errors.password}
-                  </HelperText>
+                  
+                  {/* Password Requirements Note */}
+                  {!errors.password && (
+                    <Text style={styles.passwordHint}>
+                      Password must be at least 8 characters long
+                    </Text>
+                  )}
+                  
+                  {!!errors.password && (
+                    <Text style={styles.errorText}>
+                      {errors.password}
+                    </Text>
+                  )}
 
                   {/* Confirm Password Field */}
                   <View style={styles.inputWithIcon}>
@@ -321,9 +313,11 @@ const RegisterScreen = ({ navigation }) => {
                       </Text>
                     </View>
                   </View>
-                  <HelperText type="error" visible={!!errors.confirmPassword} style={styles.helperText}>
-                    {errors.confirmPassword}
-                  </HelperText>
+                  {!!errors.confirmPassword && (
+                    <Text style={styles.errorText}>
+                      {errors.confirmPassword}
+                    </Text>
+                  )}
                 </View>
                 
                 <Button
@@ -360,7 +354,7 @@ const RegisterScreen = ({ navigation }) => {
                 By creating an account, you agree to our terms and privacy policy
               </Paragraph>
             </View>
-          </Animated.View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </GradientBackground>
@@ -477,8 +471,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
-  helperText: {
+  errorText: {
+    color: colors.danger,
+    fontSize: typography.fontSize.sm,
     marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  passwordHint: {
+    marginBottom: spacing.xs,
+    fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    opacity: 0.8,
   },
   button: {
     marginTop: spacing.md,

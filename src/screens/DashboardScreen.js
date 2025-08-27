@@ -1,24 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Animated, Text, TouchableOpacity, Modal } from 'react-native';
-import { Card, Title, Paragraph, Button, Divider } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Animated, Text, TouchableOpacity, Modal, Alert } from 'react-native';
+import { Card, Title, Paragraph, Button, Divider, Portal, Dialog, TextInput as PaperTextInput } from 'react-native-paper';
+import CustomTextInput from '../components/common/CustomTextInput';
 import { useSelector, useDispatch } from 'react-redux';
 import { signOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { logout } from '../store/slices/authSlice';
+import { ensureOwnership } from '../utils/security';
 import { colors, spacing, borderRadius, typography, shadows, components } from '../constants/theme';
+import { globalFormStyles } from '../styles/globalFormFixes';
 
 const DashboardScreen = ({ navigation }) => {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const { lowStockItems, items } = useSelector((state) => state.inventory);
-  const { locations } = useSelector((state) => state.locations);
+  const { practices } = useSelector((state) => state.practices);
   
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
   const [showMenu, setShowMenu] = useState(false);
-  const [selectedLocationId, setSelectedLocationId] = useState('all');
-  const [showLocationMenu, setShowLocationMenu] = useState(false);
+  const [selectedPracticeId, setSelectedPracticeId] = useState('all');
+  const [showPracticeMenu, setShowPracticeMenu] = useState(false);
   const [showCheckInOutModal, setShowCheckInOutModal] = useState(false);
+  const [showCreatePracticeModal, setShowCreatePracticeModal] = useState(false);
+  const [newPracticeForm, setNewPracticeForm] = useState({
+    name: '',
+    type: 'practice',
+    description: '',
+    address: '',
+  });
 
   useEffect(() => {
     Animated.parallel([
@@ -44,14 +55,14 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
-  // Filter items based on selected location
-  const filteredItems = selectedLocationId === 'all' 
+  // Filter items based on selected practice
+  const filteredItems = selectedPracticeId === 'all' 
     ? items 
-    : items.filter(item => item.locationId === selectedLocationId);
+    : items.filter(item => item.practiceId === selectedPracticeId);
 
-  const filteredLowStockItems = selectedLocationId === 'all'
+  const filteredLowStockItems = selectedPracticeId === 'all'
     ? lowStockItems
-    : lowStockItems.filter(item => item.locationId === selectedLocationId);
+    : lowStockItems.filter(item => item.practiceId === selectedPracticeId);
 
   const expiringItems = filteredItems.filter(item => {
     if (!item.expiryDate) return false;
@@ -61,36 +72,74 @@ const DashboardScreen = ({ navigation }) => {
     return daysUntilExpiry <= 30 && daysUntilExpiry > 0;
   });
 
-  // Get selected location name
-  const getSelectedLocationName = () => {
-    if (selectedLocationId === 'all') return 'All Locations';
-    const location = locations.find(loc => loc.id === selectedLocationId);
-    return location ? location.name : 'All Locations';
+  // Get selected practice name
+  const getSelectedPracticeName = () => {
+    if (selectedPracticeId === 'all') return 'All Practices';
+    const practice = practices.find(practice => practice.id === selectedPracticeId);
+    return practice ? practice.name : 'All Practices';
   };
 
-  // Location-specific analytics
-  const getLocationStats = (locationId) => {
-    const locationItems = items.filter(item => item.locationId === locationId);
-    const lowStockItems = locationItems.filter(item => item.currentQuantity <= item.minStockLevel);
+  const practiceTypes = [
+    { value: 'practice', label: 'Practice', icon: '🦷' },
+  ];
+
+  const handleCreatePractice = async () => {
+    if (!newPracticeForm.name.trim()) {
+      Alert.alert('Required Field', 'Please enter a practice name');
+      return;
+    }
+
+    try {
+      const practiceData = {
+        name: newPracticeForm.name.trim(),
+        type: newPracticeForm.type,
+        description: newPracticeForm.description.trim(),
+        address: newPracticeForm.address.trim(),
+        practiceId: user?.uid,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+
+      const securedPracticeData = ensureOwnership(practiceData);
+      await addDoc(collection(db, 'practices'), securedPracticeData);
+      
+      Alert.alert('Success', 'Practice created successfully!');
+      setShowCreatePracticeModal(false);
+      setNewPracticeForm({
+        name: '',
+        type: 'practice',
+        description: '',
+        address: '',
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create practice');
+      console.error('Error creating practice:', error);
+    }
+  };
+
+  // Practice-specific analytics
+  const getPracticeStats = (practiceId) => {
+    const practiceItems = items.filter(item => item.practiceId === practiceId);
+    const lowStockItems = practiceItems.filter(item => item.currentQuantity <= item.minStockLevel);
     return {
-      totalItems: locationItems.length,
+      totalItems: practiceItems.length,
       lowStockCount: lowStockItems.length,
       lowStockItems,
     };
   };
 
-  const getLocationName = (locationId) => {
-    const location = locations.find(loc => loc.id === locationId);
-    return location ? location.name : 'Unknown Location';
+  const getPracticeName = (practiceId) => {
+    const practice = practices.find(practice => practice.id === practiceId);
+    return practice ? practice.name : 'Unknown Practice';
   };
 
-  // Get locations with low stock alerts
-  const locationsWithLowStock = locations
-    .map(location => ({
-      ...location,
-      stats: getLocationStats(location.id)
+  // Get practices with low stock alerts
+  const practicesWithLowStock = practices
+    .map(practice => ({
+      ...practice,
+      stats: getPracticeStats(practice.id)
     }))
-    .filter(location => location.stats.lowStockCount > 0);
+    .filter(practice => practice.stats.lowStockCount > 0);
 
   const quickActions = [
     {
@@ -123,10 +172,10 @@ const DashboardScreen = ({ navigation }) => {
       },
     },
     {
-      title: 'Locations',
+      title: 'Practices',
       action: () => {
         setShowMenu(false);
-        navigation.navigate('Locations');
+        navigation.navigate('Practices');
       },
     },
     {
@@ -155,14 +204,14 @@ const DashboardScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Location Filter */}
-        <View style={styles.locationFilterContainer}>
-          <Text style={styles.locationFilterLabel}>View inventory for:</Text>
+        {/* Practice Filter */}
+        <View style={styles.practiceFilterContainer}>
+          <Text style={styles.practiceFilterLabel}>View inventory for:</Text>
           <TouchableOpacity
-            style={styles.locationDropdown}
-            onPress={() => setShowLocationMenu(true)}
+            style={styles.practiceDropdown}
+            onPress={() => setShowPracticeMenu(true)}
           >
-            <Text style={styles.locationDropdownText}>{getSelectedLocationName()}</Text>
+            <Text style={styles.practiceDropdownText}>{getSelectedPracticeName()}</Text>
             <Text style={styles.dropdownArrow}>▼</Text>
           </TouchableOpacity>
         </View>
@@ -267,36 +316,36 @@ const DashboardScreen = ({ navigation }) => {
           </Card>
         )}
 
-        {/* Location-Specific Low Stock Alerts */}
-        {locationsWithLowStock.length > 0 && (
-          <Card style={styles.locationAlertsCard}>
-            <Card.Content style={styles.locationAlertsContent}>
-              <View style={styles.locationAlertsHeader}>
-                <View style={styles.locationAlertsText}>
-                  <Title style={styles.locationAlertsTitle}>Low Stock by Location</Title>
-                  <Paragraph style={styles.locationAlertsDescription}>
-                    {locationsWithLowStock.length} locations have low stock items
+        {/* Practice-Specific Low Stock Alerts */}
+        {practicesWithLowStock.length > 0 && (
+          <Card style={styles.practiceAlertsCard}>
+            <Card.Content style={styles.practiceAlertsContent}>
+              <View style={styles.practiceAlertsHeader}>
+                <View style={styles.practiceAlertsText}>
+                  <Title style={styles.practiceAlertsTitle}>Low Stock by Practice</Title>
+                  <Paragraph style={styles.practiceAlertsDescription}>
+                    {practicesWithLowStock.length} practices have low stock items
                   </Paragraph>
                 </View>
               </View>
               
-              <View style={styles.locationAlertsList}>
-                {locationsWithLowStock.map((location) => (
+              <View style={styles.practiceAlertsList}>
+                {practicesWithLowStock.map((practice) => (
                   <TouchableOpacity
-                    key={location.id}
-                    style={styles.locationAlertItem}
-                    onPress={() => navigation.navigate('Inventory', { locationId: location.id, filter: 'lowStock' })}
+                    key={practice.id}
+                    style={styles.practiceAlertItem}
+                    onPress={() => navigation.navigate('Inventory', { practiceId: practice.id, filter: 'lowStock' })}
                   >
-                    <View style={styles.locationAlertInfo}>
-                      <Text style={styles.locationAlertName}>{location.name}</Text>
-                      <Text style={styles.locationAlertType}>{location.type}</Text>
-                      <Text style={styles.locationAlertCount}>
-                        {location.stats.lowStockCount} low stock items
+                    <View style={styles.practiceAlertInfo}>
+                      <Text style={styles.practiceAlertName}>{practice.name}</Text>
+                      <Text style={styles.practiceAlertType}>{practice.type}</Text>
+                      <Text style={styles.practiceAlertCount}>
+                        {practice.stats.lowStockCount} low stock items
                       </Text>
                     </View>
-                    <View style={styles.locationAlertBadge}>
-                      <Text style={styles.locationAlertBadgeText}>
-                        {location.stats.lowStockCount}
+                    <View style={styles.practiceAlertBadge}>
+                      <Text style={styles.practiceAlertBadgeText}>
+                        {practice.stats.lowStockCount}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -305,11 +354,11 @@ const DashboardScreen = ({ navigation }) => {
 
               <Button
                 mode="text"
-                onPress={() => navigation.navigate('Locations')}
+                onPress={() => navigation.navigate('Practices')}
                 textColor={colors.danger}
                 style={styles.alertButton}
               >
-                Manage Locations
+                Manage Practices
               </Button>
             </Card.Content>
           </Card>
@@ -363,63 +412,75 @@ const DashboardScreen = ({ navigation }) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* Location Filter Modal */}
+      {/* Practice Filter Modal */}
       <Modal
-        visible={showLocationMenu}
+        visible={showPracticeMenu}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowLocationMenu(false)}
+        onRequestClose={() => setShowPracticeMenu(false)}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowLocationMenu(false)}
+          onPress={() => setShowPracticeMenu(false)}
         >
-          <View style={styles.locationMenuContainer}>
-            <View style={styles.locationMenuContent}>
+          <View style={styles.practiceMenuContainer}>
+            <View style={styles.practiceMenuContent}>
               <TouchableOpacity
                 style={[
-                  styles.locationMenuItem,
-                  selectedLocationId === 'all' && styles.selectedLocationItem
+                  styles.practiceMenuItem,
+                  selectedPracticeId === 'all' && styles.selectedPracticeItem
                 ]}
                 onPress={() => {
-                  setSelectedLocationId('all');
-                  setShowLocationMenu(false);
+                  setSelectedPracticeId('all');
+                  setShowPracticeMenu(false);
                 }}
               >
                 <Text style={[
-                  styles.locationMenuText,
-                  selectedLocationId === 'all' && styles.selectedLocationText
-                ]}>All Locations</Text>
-                {selectedLocationId === 'all' && (
+                  styles.practiceMenuText,
+                  selectedPracticeId === 'all' && styles.selectedPracticeText
+                ]}>All Practices</Text>
+                {selectedPracticeId === 'all' && (
                   <Text style={styles.checkmark}>✓</Text>
                 )}
               </TouchableOpacity>
-              {locations.map((location) => (
+              {practices.map((practice, index) => (
                 <TouchableOpacity
-                  key={location.id}
+                  key={practice.id}
                   style={[
-                    styles.locationMenuItem,
-                    selectedLocationId === location.id && styles.selectedLocationItem,
-                    location.id === locations[locations.length - 1].id && styles.lastLocationMenuItem
+                    styles.practiceMenuItem,
+                    selectedPracticeId === practice.id && styles.selectedPracticeItem
                   ]}
                   onPress={() => {
-                    setSelectedLocationId(location.id);
-                    setShowLocationMenu(false);
+                    setSelectedPracticeId(practice.id);
+                    setShowPracticeMenu(false);
                   }}
                 >
-                  <View style={styles.locationItemContent}>
+                  <View style={styles.practiceItemContent}>
                     <Text style={[
-                      styles.locationMenuText,
-                      selectedLocationId === location.id && styles.selectedLocationText
-                    ]}>{location.name}</Text>
-                    <Text style={styles.locationTypeText}>{location.type}</Text>
+                      styles.practiceMenuText,
+                      selectedPracticeId === practice.id && styles.selectedPracticeText
+                    ]}>{practice.name}</Text>
+                    <Text style={styles.practiceTypeText}>{practice.type}</Text>
                   </View>
-                  {selectedLocationId === location.id && (
+                  {selectedPracticeId === practice.id && (
                     <Text style={styles.checkmark}>✓</Text>
                   )}
                 </TouchableOpacity>
               ))}
+              
+              {/* Add New Practice Option */}
+              <TouchableOpacity
+                style={[styles.practiceMenuItem, styles.addPracticeItem]}
+                onPress={() => {
+                  setShowPracticeMenu(false);
+                  setShowCreatePracticeModal(true);
+                }}
+              >
+                <View style={styles.practiceItemContent}>
+                  <Text style={styles.addPracticeText}>+ Add New Practice</Text>
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>
@@ -484,6 +545,88 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Create Practice Modal */}
+      <Portal>
+        <Dialog 
+          visible={showCreatePracticeModal} 
+          onDismiss={() => setShowCreatePracticeModal(false)}
+          style={styles.createPracticeDialog}
+        >
+          <Dialog.Title>Add New Practice</Dialog.Title>
+          <Dialog.Content>
+            <View style={[styles.createPracticeForm, globalFormStyles.formContainer]}>
+              <CustomTextInput
+                label="Practice Name *"
+                value={newPracticeForm.name}
+                onChangeText={(text) => setNewPracticeForm(prev => ({ ...prev, name: text }))}
+                style={[globalFormStyles.input, styles.createPracticeInput]}
+                mode="outlined"
+                placeholder="e.g., Downtown Dental Practice"
+                outlineColor={colors.borderLight}
+                activeOutlineColor={colors.primary}
+              />
+              
+              <Text style={styles.fieldLabel}>Practice Type</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeSelector}>
+                {practiceTypes.map((type) => (
+                  <TouchableOpacity
+                    key={type.value}
+                    onPress={() => setNewPracticeForm(prev => ({ ...prev, type: type.value }))}
+                    style={[
+                      styles.typeChip,
+                      newPracticeForm.type === type.value && styles.selectedTypeChip
+                    ]}
+                  >
+                    <Text style={styles.typeIcon}>{type.icon}</Text>
+                    <Text style={[
+                      styles.typeLabel,
+                      newPracticeForm.type === type.value && styles.selectedTypeLabel
+                    ]}>
+                      {type.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              
+              <CustomTextInput
+                label="Description (Optional)"
+                value={newPracticeForm.description}
+                onChangeText={(text) => setNewPracticeForm(prev => ({ ...prev, description: text }))}
+                style={[globalFormStyles.input, styles.createPracticeInput]}
+                mode="outlined"
+                multiline
+                numberOfLines={2}
+                placeholder="Brief description or notes"
+                outlineColor={colors.borderLight}
+                activeOutlineColor={colors.primary}
+              />
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => {
+                setShowCreatePracticeModal(false);
+                setNewPracticeForm({
+                  name: '',
+                  type: 'practice',
+                  description: '',
+                  address: '',
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onPress={handleCreatePractice} 
+              textColor={colors.primary}
+              disabled={!newPracticeForm.name.trim()}
+            >
+              Create Practice
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 };
@@ -660,8 +803,8 @@ const styles = StyleSheet.create({
     fontSize: 26,
     textAlign: 'center',
   },
-  // Location Alerts Styles
-  locationAlertsCard: {
+  // Practice Alerts Styles
+  practiceAlertsCard: {
     marginBottom: spacing.xl,
     borderRadius: borderRadius.lg,
     backgroundColor: colors.dangerLight + '15',
@@ -669,37 +812,37 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.danger,
     ...shadows.small,
   },
-  locationAlertsContent: {
+  practiceAlertsContent: {
     padding: spacing.lg,
   },
-  locationAlertsHeader: {
+  practiceAlertsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
-  locationAlertsIcon: {
+  practiceAlertsIcon: {
     fontSize: 20,
     textAlign: 'center',
     marginRight: spacing.sm,
   },
-  locationAlertsText: {
+  practiceAlertsText: {
     flex: 1,
   },
-  locationAlertsTitle: {
+  practiceAlertsTitle: {
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
     color: colors.danger,
     marginBottom: spacing.xs,
   },
-  locationAlertsDescription: {
+  practiceAlertsDescription: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
   },
-  locationAlertsList: {
+  practiceAlertsList: {
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  locationAlertItem: {
+  practiceAlertItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -709,27 +852,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
-  locationAlertInfo: {
+  practiceAlertInfo: {
     flex: 1,
   },
-  locationAlertName: {
+  practiceAlertName: {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
     color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
-  locationAlertType: {
+  practiceAlertType: {
     fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     textTransform: 'capitalize',
     marginBottom: spacing.xs,
   },
-  locationAlertCount: {
+  practiceAlertCount: {
     fontSize: typography.fontSize.xs,
     color: colors.danger,
     fontWeight: typography.fontWeight.medium,
   },
-  locationAlertBadge: {
+  practiceAlertBadge: {
     backgroundColor: colors.danger,
     borderRadius: 12,
     width: 24,
@@ -738,7 +881,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: spacing.sm,
   },
-  locationAlertBadgeText: {
+  practiceAlertBadgeText: {
     fontSize: 11,
     fontWeight: typography.fontWeight.bold,
     color: colors.white,
@@ -791,8 +934,8 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: typography.fontWeight.bold,
   },
-  // Location Filter Styles
-  locationFilterContainer: {
+  // Practice Filter Styles
+  practiceFilterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -803,12 +946,12 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     ...shadows.small,
   },
-  locationFilterLabel: {
+  practiceFilterLabel: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
     fontWeight: typography.fontWeight.medium,
   },
-  locationDropdown: {
+  practiceDropdown: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.lightGray,
@@ -817,7 +960,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     minWidth: 150,
   },
-  locationDropdownText: {
+  practiceDropdownText: {
     fontSize: typography.fontSize.sm,
     color: colors.textPrimary,
     fontWeight: typography.fontWeight.medium,
@@ -828,18 +971,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: spacing.sm,
   },
-  // Location Menu Modal Styles
-  locationMenuContainer: {
+  // Practice Menu Modal Styles
+  practiceMenuContainer: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     ...shadows.large,
     minWidth: 250,
     maxHeight: 300,
   },
-  locationMenuContent: {
+  practiceMenuContent: {
     paddingVertical: spacing.sm,
   },
-  locationMenuItem: {
+  practiceMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
@@ -847,25 +990,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  lastLocationMenuItem: {
+  lastPracticeMenuItem: {
     borderBottomWidth: 0,
   },
-  selectedLocationItem: {
+  selectedPracticeItem: {
     backgroundColor: colors.primaryLight + '20',
   },
-  locationItemContent: {
+  practiceItemContent: {
     flex: 1,
   },
-  locationMenuText: {
+  practiceMenuText: {
     fontSize: typography.fontSize.md,
     color: colors.textPrimary,
     fontWeight: typography.fontWeight.medium,
   },
-  selectedLocationText: {
+  selectedPracticeText: {
     color: colors.primary,
     fontWeight: typography.fontWeight.bold,
   },
-  locationTypeText: {
+  practiceTypeText: {
     fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
     marginTop: spacing.xs,
@@ -938,6 +1081,65 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     borderRadius: borderRadius.lg,
     width: '100%',
+  },
+  // Add Practice Menu Item
+  addPracticeItem: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    marginTop: spacing.xs,
+    paddingTop: spacing.md,
+  },
+  addPracticeText: {
+    fontSize: typography.fontSize.md,
+    color: colors.primary,
+    fontWeight: typography.fontWeight.bold,
+  },
+  // Create Practice Modal
+  createPracticeDialog: {
+    maxHeight: '80%',
+  },
+  createPracticeForm: {
+    gap: spacing.md,
+  },
+  createPracticeInput: {
+    marginBottom: spacing.sm,
+  },
+  fieldLabel: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  typeSelector: {
+    marginBottom: spacing.md,
+  },
+  typeChip: {
+    backgroundColor: colors.lightGray,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginRight: spacing.sm,
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  selectedTypeChip: {
+    backgroundColor: colors.primaryLight + '30',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  typeIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  typeLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  selectedTypeLabel: {
+    color: colors.primary,
+    fontWeight: typography.fontWeight.medium,
   },
 });
 

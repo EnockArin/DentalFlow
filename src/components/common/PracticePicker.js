@@ -14,75 +14,80 @@ import {
 import { useSelector } from 'react-redux';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 
-const LocationPicker = ({ 
+const PracticePicker = ({ 
   value, 
   onSelect, 
-  placeholder = "Select location",
+  placeholder = "Select practice *",
   style,
   disabled = false 
 }) => {
-  const { locations } = useSelector((state) => state.locations);
+  const { practices } = useSelector((state) => state.practices);
   const [visible, setVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedPractice, setSelectedPractice] = useState(null);
 
-  const locationTypes = {
-    operatory: { label: 'Operatory', icon: '🦷' },
-    clinic: { label: 'Clinic', icon: '🏥' },
-    storage: { label: 'Storage', icon: '📦' },
-    sterilization: { label: 'Sterilization', icon: '🧪' },
-    lab: { label: 'Lab', icon: '🔬' },
+  const practiceTypes = {
+    practice: { label: 'Practice', icon: '🦷' },
   };
 
   useEffect(() => {
-    if (value && locations.length > 0) {
-      const location = locations.find(loc => loc.id === value);
-      setSelectedLocation(location);
+    if (value && practices.length > 0) {
+      const practice = practices.find(practice => practice.id === value);
+      setSelectedPractice(practice);
     }
-  }, [value, locations]);
+  }, [value, practices]);
 
-  const filteredLocations = locations.filter(location =>
-    location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    location.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (location.description && location.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  // Auto-select practice if only one exists and none is selected
+  useEffect(() => {
+    if (!value && practices.length === 1 && onSelect) {
+      const singlePractice = practices[0];
+      setSelectedPractice(singlePractice);
+      onSelect(singlePractice.id, singlePractice.name);
+    }
+  }, [practices, value, onSelect]);
+
+  const filteredPractices = practices.filter(practice =>
+    practice.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    practice.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (practice.description && practice.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const handleLocationSelect = (location) => {
-    setSelectedLocation(location);
-    onSelect(location.id, location.name);
+  const handlePracticeSelect = (practice) => {
+    setSelectedPractice(practice);
+    onSelect(practice.id, practice.name);
     setVisible(false);
     setSearchQuery('');
   };
 
   const handleClear = () => {
-    setSelectedLocation(null);
+    setSelectedPractice(null);
     onSelect('', '');
   };
 
   const getDisplayText = () => {
-    if (selectedLocation) {
-      const typeInfo = locationTypes[selectedLocation.type] || locationTypes.operatory;
-      return `${typeInfo.icon} ${selectedLocation.name}`;
+    if (selectedPractice) {
+      const typeInfo = practiceTypes[selectedPractice.type] || practiceTypes.practice;
+      return `${typeInfo.icon} ${selectedPractice.name}`;
     }
     return placeholder;
   };
 
-  const renderLocationItem = ({ item }) => {
-    const typeInfo = locationTypes[item.type] || locationTypes.operatory;
+  const renderPracticeItem = ({ item }) => {
+    const typeInfo = practiceTypes[item.type] || practiceTypes.practice;
     
     return (
-      <TouchableOpacity onPress={() => handleLocationSelect(item)}>
+      <TouchableOpacity onPress={() => handlePracticeSelect(item)}>
         <List.Item
           title={item.name}
           description={`${typeInfo.label}${item.description ? ` • ${item.description}` : ''}`}
           left={(props) => (
-            <View style={styles.locationIcon}>
-              <Text style={styles.locationIconText}>{typeInfo.icon}</Text>
+            <View style={styles.practiceIcon}>
+              <Text style={styles.practiceIconText}>{typeInfo.icon}</Text>
             </View>
           )}
-          style={styles.locationItem}
-          titleStyle={styles.locationTitle}
-          descriptionStyle={styles.locationDescription}
+          style={styles.practiceItem}
+          titleStyle={styles.practiceTitle}
+          descriptionStyle={styles.practiceDescription}
         />
       </TouchableOpacity>
     );
@@ -98,17 +103,10 @@ const LocationPicker = ({
           placeholder={placeholder}
           onPressIn={() => !disabled && setVisible(true)}
           onFocus={() => !disabled && setVisible(true)}
-          right={
-            <TextInput.Icon 
-              icon={selectedLocation ? "close" : "chevron-down"} 
-              onPress={selectedLocation ? handleClear : () => !disabled && setVisible(true)}
-            />
-          }
-          left={<TextInput.Icon icon="map-marker-outline" />}
           outlineColor={colors.borderLight}
           activeOutlineColor={colors.primary}
           style={[styles.input, disabled && styles.disabledInput]}
-          textColor={selectedLocation ? colors.textPrimary : colors.textSecondary}
+          textColor={selectedPractice ? colors.textPrimary : colors.textSecondary}
         />
       </TouchableOpacity>
 
@@ -120,33 +118,34 @@ const LocationPicker = ({
         >
           <Card style={styles.modalCard}>
             <Card.Content style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Select Location</Text>
+              <Text style={styles.modalTitle}>Select Practice</Text>
               
               <Searchbar
-                placeholder="Search locations..."
+                placeholder="Search practices..."
                 onChangeText={setSearchQuery}
                 value={searchQuery}
                 style={styles.searchbar}
+                icon={() => null}
               />
 
-              {filteredLocations.length === 0 ? (
+              {filteredPractices.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyIcon}>🏥</Text>
+                  <Text style={styles.emptyIcon}>🦷</Text>
                   <Text style={styles.emptyText}>
-                    {searchQuery ? 'No locations match your search' : 'No locations available'}
+                    {searchQuery ? 'No practices match your search' : 'No practices available'}
                   </Text>
                   {!searchQuery && (
                     <Text style={styles.emptySubtext}>
-                      Create locations in the Locations tab
+                      Create practices in the Practices tab
                     </Text>
                   )}
                 </View>
               ) : (
                 <FlatList
-                  data={filteredLocations}
-                  renderItem={renderLocationItem}
+                  data={filteredPractices}
+                  renderItem={renderPracticeItem}
                   keyExtractor={(item) => item.id}
-                  style={styles.locationsList}
+                  style={styles.practicesList}
                   showsVerticalScrollIndicator={false}
                 />
               )}
@@ -202,16 +201,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     elevation: 2,
   },
-  locationsList: {
+  practicesList: {
     maxHeight: 300,
     marginBottom: spacing.md,
   },
-  locationItem: {
+  practiceItem: {
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  locationIcon: {
+  practiceIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -220,15 +219,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: spacing.sm,
   },
-  locationIconText: {
+  practiceIconText: {
     fontSize: 20,
   },
-  locationTitle: {
+  practiceTitle: {
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.medium,
     color: colors.textPrimary,
   },
-  locationDescription: {
+  practiceDescription: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
   },
@@ -262,4 +261,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LocationPicker;
+export default PracticePicker;

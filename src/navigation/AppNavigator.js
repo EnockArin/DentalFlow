@@ -7,6 +7,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { loginSuccess, logout } from '../store/slices/authSlice';
 import { setItems, setLoading } from '../store/slices/inventorySlice';
+import { setPractices, setLoading as setPracticesLoading } from '../store/slices/practicesSlice';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
@@ -21,14 +22,14 @@ import ShoppingListScreen from '../screens/ShoppingListScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import TreatmentKitsScreen from '../screens/TreatmentKitsScreen';
 import TreatmentKitDetailScreen from '../screens/TreatmentKitDetailScreen';
-import LocationsScreen from '../screens/LocationsScreen';
+import PracticesScreen from '../screens/PracticesScreen';
 import StockTransferScreen from '../screens/StockTransferScreen';
 
 const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
   const dispatch = useDispatch();
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
@@ -86,6 +87,39 @@ const AppNavigator = () => {
 
     return () => inventoryUnsubscribe();
   }, [dispatch, isAuthenticated]);
+
+  // Load practices data when user is authenticated
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      return;
+    }
+    
+    const practicesQuery = query(
+      collection(db, 'practices'),
+      where('practiceId', '==', user.uid)
+    );
+    
+    const practicesUnsubscribe = onSnapshot(practicesQuery, (querySnapshot) => {
+      const practicesData = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const serializableData = {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt ? (data.createdAt instanceof Date ? data.createdAt : data.createdAt.toDate()) : null,
+          updatedAt: data.updatedAt ? (data.updatedAt instanceof Date ? data.updatedAt : data.updatedAt.toDate()) : null,
+        };
+        practicesData.push(serializableData);
+      });
+      dispatch(setPractices(practicesData));
+      dispatch(setPracticesLoading(false));
+    }, (error) => {
+      console.error('Error fetching practices:', error);
+      dispatch(setPracticesLoading(false));
+    });
+
+    return () => practicesUnsubscribe();
+  }, [dispatch, isAuthenticated, user]);
 
   return (
     <NavigationContainer>
@@ -184,9 +218,9 @@ const AppNavigator = () => {
               })}
             />
             <Stack.Screen 
-              name="Locations" 
-              component={LocationsScreen}
-              options={{ title: 'Locations' }}
+              name="Practices" 
+              component={PracticesScreen}
+              options={{ title: 'Practices' }}
             />
             <Stack.Screen 
               name="StockTransfer" 
