@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
 import { Button, Card, Title, Paragraph, TextInput, Divider } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
+import GoogleIcon from '../components/common/GoogleIcon';
 import { useDispatch, useSelector } from 'react-redux';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -382,7 +383,7 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.googleButton}
                   contentStyle={styles.buttonContent}
                   textColor={colors.textPrimary}
-                  icon="google"
+                  icon={({ size }) => <GoogleIcon size={size} />}
                 >
                   {googleLoading ? 'Creating Account with Google...' : 'Continue with Google'}
                 </Button>
