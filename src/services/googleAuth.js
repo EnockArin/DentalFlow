@@ -1,7 +1,8 @@
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
-import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { auth, googleProvider } from '../config/firebase';
+import { Platform } from 'react-native';
 
 // Complete the authentication flow for web browsers
 WebBrowser.maybeCompleteAuthSession();
@@ -12,59 +13,33 @@ export const configureGoogleSignIn = () => {
   console.log('Google Sign-In configured for Expo');
 };
 
-// Sign in with Google using Expo AuthSession
+// Sign in with Google - development-friendly approach
 export const signInWithGoogle = async () => {
   try {
-    const clientId = process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID;
-    
-    if (!clientId) {
-      throw new Error('Google Web Client ID not found in environment variables');
-    }
-
-    // Configure the auth request
-    const request = new AuthSession.AuthRequest({
-      clientId: clientId,
-      scopes: ['openid', 'profile', 'email'],
-      responseType: AuthSession.ResponseType.IdToken,
-      redirectUri: AuthSession.makeRedirectUri({
-        useProxy: true,
-      }),
-    });
-
-    // Prompt for authentication
-    const result = await request.promptAsync({
-      authorizationEndpoint: 'https://accounts.google.com/oauth/v2/auth',
-    });
-
-    if (result.type === 'success') {
-      // Extract the ID token
-      const { id_token } = result.params;
-      
-      if (!id_token) {
-        throw new Error('No ID token received from Google');
-      }
-
-      // Create Firebase credential
-      const googleCredential = GoogleAuthProvider.credential(id_token);
-      
-      // Sign in to Firebase with the credential
-      const userCredential = await signInWithCredential(auth, googleCredential);
-      
+    // For web platform, use Firebase's signInWithPopup (works without redirect URIs)
+    if (Platform.OS === 'web') {
+      console.log('🌐 Using web-based Google Sign-In');
+      const result = await signInWithPopup(auth, googleProvider);
       return {
         success: true,
-        user: userCredential.user,
-      };
-    } else if (result.type === 'cancel') {
-      return {
-        success: false,
-        error: 'Google Sign-In was cancelled.',
-      };
-    } else {
-      return {
-        success: false,
-        error: 'Google Sign-In failed. Please try again.',
+        user: result.user,
       };
     }
+    
+    // For mobile development, show helpful message about testing alternatives
+    if (__DEV__ && Platform.OS !== 'web') {
+      console.log('🚧 Development Mode: Try Google Sign-In on web platform or use email/password');
+      return {
+        success: false,
+        error: 'Google Sign-In works on web platform. For mobile testing, use email/password authentication or create a production build.',
+      };
+    }
+    
+    // Fallback for production mobile builds (when properly configured)
+    return {
+      success: false,
+      error: 'Google Sign-In configuration needed for this platform.',
+    };
   } catch (error) {
     console.error('Google Sign-In Error:', error);
     
