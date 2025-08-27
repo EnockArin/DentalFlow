@@ -36,12 +36,26 @@ export const signInWithGoogle = async () => {
     console.log('📱 Attempting mobile Google Sign-In...');
     
     try {
-      // Get the actual redirect URI that Expo generates
+      // Check what type of redirect URI Expo generates
       const actualRedirectUri = AuthSession.makeRedirectUri({
         useProxy: true,
       });
       
       console.log('🚨 ACTUAL REDIRECT URI GENERATED:', actualRedirectUri);
+      
+      // Check if it's a development exp:// URI that can't be added to Firebase
+      if (actualRedirectUri.startsWith('exp://')) {
+        console.log('⚠️  DEVELOPMENT MODE DETECTED');
+        console.log('🚫 Firebase Console cannot accept exp:// URIs');
+        console.log('💡 SOLUTION: For development testing, use email/password authentication');
+        console.log('🏗️  For Google Sign-In, create a production build with: eas build');
+        
+        return {
+          success: false,
+          error: 'Google Sign-In requires production build. Development uses exp:// URIs which Firebase cannot accept. Please use email/password for testing, or create a production build.',
+        };
+      }
+      
       console.log('🔥 ADD THIS EXACT URI TO FIREBASE CONSOLE:');
       console.log('   Firebase Console → Authentication → Google → Authorized redirect URIs');
       console.log('   Add URI:', actualRedirectUri);
