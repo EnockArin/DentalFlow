@@ -2,17 +2,26 @@
 
 ## 🎯 Firebase Console Configuration
 
-### **Step 1: Add Mobile Redirect URI**
+### **Step 1: Get Your Actual Redirect URI**
+
+1. **Try Google Sign-In in your app first**
+2. **Check the console logs** for this message:
+   ```
+   🚨 ACTUAL REDIRECT URI GENERATED: [your-actual-uri]
+   ```
+3. **Copy that exact URI**
+
+### **Step 2: Add Mobile Redirect URI to Firebase**
 
 1. **Go to Firebase Console** → **Authentication** → **Sign-in method** → **Google**
 2. **Scroll to "Authorized redirect URIs"**
-3. **Click "Add URI"** and add:
-
-```
-https://auth.expo.io/@anonymous/dentalflow
-```
-
+3. **Click "Add URI"** and paste the URI from step 1
 4. **Click "Save"**
+
+**Common redirect URIs that might be generated:**
+- `https://auth.expo.io/@anonymous/DentalFlow`
+- `https://auth.expo.io/redirect`
+- `exp://127.0.0.1:8081/--/`
 
 ### **Step 2: Verify Google OAuth is Enabled**
 

@@ -36,20 +36,27 @@ export const signInWithGoogle = async () => {
     console.log('📱 Attempting mobile Google Sign-In...');
     
     try {
-      // Create a custom redirect URI that Firebase can handle
-      const customScheme = 'https://auth.expo.io/@anonymous/dentalflow';
+      // Get the actual redirect URI that Expo generates
+      const actualRedirectUri = AuthSession.makeRedirectUri({
+        useProxy: true,
+      });
+      
+      console.log('🚨 ACTUAL REDIRECT URI GENERATED:', actualRedirectUri);
+      console.log('🔥 ADD THIS EXACT URI TO FIREBASE CONSOLE:');
+      console.log('   Firebase Console → Authentication → Google → Authorized redirect URIs');
+      console.log('   Add URI:', actualRedirectUri);
       
       const request = new AuthSession.AuthRequest({
         clientId: clientId,
         scopes: ['openid', 'profile', 'email'],
         responseType: AuthSession.ResponseType.Code, // Use code instead of token
-        redirectUri: customScheme,
+        redirectUri: actualRedirectUri,
         additionalParameters: {
           access_type: 'offline',
         },
       });
 
-      console.log('🔗 Using redirect URI:', customScheme);
+      console.log('🔗 Using redirect URI:', actualRedirectUri);
 
       const result = await request.promptAsync({
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -73,7 +80,7 @@ export const signInWithGoogle = async () => {
             body: new URLSearchParams({
               client_id: clientId,
               code: code,
-              redirect_uri: customScheme,
+              redirect_uri: actualRedirectUri,
               grant_type: 'authorization_code',
             }),
           });
