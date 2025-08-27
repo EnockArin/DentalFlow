@@ -40,8 +40,8 @@ export const globalFormStyles = StyleSheet.create({
       },
       web: {
         // Web-specific hiding of validation elements
-        outline: 'none',
-        border: 'none',
+        outlineStyle: 'none',
+        borderStyle: 'none',
       },
       default: {},
     }),

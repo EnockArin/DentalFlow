@@ -281,9 +281,16 @@ const styles = StyleSheet.create({
     color: colors.white,
     textAlign: 'center',
     marginBottom: spacing.sm,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    ...Platform.select({
+      web: {
+        textShadow: '0 2px 4px rgba(0,0,0,0.3)',
+      },
+      default: {
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+      },
+    }),
   },
   subtitle: {
     fontSize: typography.fontSize.md,
