@@ -2,16 +2,15 @@ import { initializeApp } from 'firebase/app';
 import { initializeAuth, getReactNativePersistence, getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
-import { firebaseConfig as hardcodedConfig } from './firebase.config';
 
-// Use hardcoded config in production, environment variables in development
+// Use environment variables for Firebase configuration
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || hardcodedConfig.apiKey,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || hardcodedConfig.authDomain,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || hardcodedConfig.projectId,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || hardcodedConfig.storageBucket,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || hardcodedConfig.messagingSenderId,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || hardcodedConfig.appId
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
 // Validate configuration
