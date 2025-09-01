@@ -2,7 +2,6 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
-import { googleWebClientId } from '../config/firebase.config';
 import { Platform } from 'react-native';
 
 // Complete the authentication flow for web browsers
@@ -28,7 +27,7 @@ export const signInWithGoogle = async () => {
     }
     
     // For mobile platforms, use a custom redirect approach that works with Firebase
-    const clientId = process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID || googleWebClientId;
+    const clientId = process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID;
     
     if (!clientId) {
       throw new Error('Google Web Client ID not found in environment variables');
