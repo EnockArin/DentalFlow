@@ -38,6 +38,7 @@ yarn-error.*
 google-services.json
 GoogleService-Info.plist
 firebase-config.js
+src/config/firebase.config.js
 
 # typescript
 *.tsbuildinfo

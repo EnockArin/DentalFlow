@@ -34,8 +34,6 @@
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSAppTransportSecurity</key>
@@ -47,6 +45,8 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>Allow DentalFlow to access camera for barcode scanning.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>UILaunchStoryboardName</key>

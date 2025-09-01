@@ -43,7 +43,9 @@
         {
           "cameraPermission": "Allow DentalFlow to access camera for barcode scanning."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {
