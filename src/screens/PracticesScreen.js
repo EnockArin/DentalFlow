@@ -76,12 +76,12 @@ const PracticesScreen = ({ navigation }) => {
   );
 
   const getPracticeInventoryCount = (practiceId) => {
-    return items.filter(item => item.practiceId === practiceId).length;
+    return items.filter(item => (item.assignedPracticeId || item.practiceId) === practiceId).length;
   };
 
   const getPracticeLowStockCount = (practiceId) => {
     return items.filter(item => 
-      item.practiceId === practiceId && 
+      (item.assignedPracticeId || item.practiceId) === practiceId && 
       item.currentQuantity <= item.minStockLevel
     ).length;
   };
@@ -158,7 +158,7 @@ const PracticesScreen = ({ navigation }) => {
     if (!practiceToDelete) return;
     
     // Check if practice has inventory items
-    const practiceItems = items.filter(item => item.practiceId === practiceToDelete.id);
+    const practiceItems = items.filter(item => (item.assignedPracticeId || item.practiceId) === practiceToDelete.id);
     if (practiceItems.length > 0) {
       Alert.alert(
         'Cannot Delete Practice',

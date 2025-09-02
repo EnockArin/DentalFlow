@@ -206,12 +206,22 @@ const TreatmentKitDetailScreen = ({ navigation, route }) => {
     
     const unmappedItems = selectedItems.filter(item => !item.inventoryId);
     if (unmappedItems.length > 0) {
+      // Show confirmation dialog instead of blocking
       Alert.alert(
-        'Unmapped Items',
-        `${unmappedItems.length} items are not linked to inventory. Please map them first.`
+        'Items Not in Inventory',
+        `${unmappedItems.length} items are not currently in your inventory. You can still create this treatment kit, but these items won't be linked to your inventory until you add them.\n\nDo you want to continue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Kit Anyway', onPress: () => proceedWithSave() }
+        ]
       );
       return;
     }
+    
+    proceedWithSave();
+  };
+
+  const proceedWithSave = async () => {
     
     setSaving(true);
     

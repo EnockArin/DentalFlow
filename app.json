@@ -4,17 +4,21 @@
     "slug": "DentalFlow",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./app-icon.png",
+    "icon": "./dental-flow-app-icon.jpg",
     "scheme": "dentalflow",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.DentalFlow"
+      "bundleIdentifier": "com.anonymous.DentalFlow",
+      "infoPlist": {
+        "NSCameraUsageDescription": "DentalFlow needs camera access to scan barcodes for inventory management.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./app-icon.png",
+        "foregroundImage": "./dental-flow-app-icon.jpg",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,

@@ -39,7 +39,7 @@ const StockTransferScreen = ({ navigation, route }) => {
 
   // Get available source practices (practices with inventory)
   const sourcePractices = practices.filter(practice => 
-    items.some(item => item.practiceId === practice.id)
+    items.some(item => (item.assignedPracticeId || item.practiceId) === practice.id)
   );
 
   // Get current source practice
@@ -47,7 +47,7 @@ const StockTransferScreen = ({ navigation, route }) => {
   
   // Get items available at the selected source practice
   const sourceItems = items.filter(item => 
-    item.practiceId === sourcePracticeId &&
+    (item.assignedPracticeId || item.practiceId) === sourcePracticeId &&
     item.currentQuantity > 0
   );
 
@@ -167,7 +167,7 @@ const StockTransferScreen = ({ navigation, route }) => {
           collection(db, 'inventory'),
           where('productName', '==', item.productName),
           where('barcode', '==', item.barcode || ''),
-          where('practiceId', '==', destinationPracticeId),
+          where('assignedPracticeId', '==', destinationPracticeId),
           where('practiceId', '==', user?.uid)
         );
 
@@ -189,7 +189,8 @@ const StockTransferScreen = ({ navigation, route }) => {
               await addDoc(collection(db, 'inventory'), {
                 ...item,
                 id: undefined, // Remove the old ID
-                practiceId: destinationPracticeId,
+                assignedPracticeId: destinationPracticeId, // Use new field for practice assignment
+                practiceId: user?.uid, // Keep user ownership for security
                 practiceName: getPracticeName(destinationPracticeId),
                 currentQuantity: transferQty,
                 createdAt: Timestamp.now(),

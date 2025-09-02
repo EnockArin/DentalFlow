@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, Text, Animated } from 'react-native';
 import { 
   Button, 
   Card, 
@@ -44,6 +44,8 @@ const ItemDetailScreen = ({ navigation, route }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(30));
 
   // Initialize form data when editing
   useEffect(() => {
@@ -53,7 +55,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
         barcode: item.barcode || '',
         currentQuantity: '', // Leave blank when editing since we're adding stock
         minStockLevel: item.minStockLevel?.toString() || '',
-        practiceId: item.practiceId || '',
+        practiceId: item.assignedPracticeId || item.practiceId || '',
         practiceName: item.practiceName || item.practice || '',
         cost: item.cost?.toString() || '',
         description: item.description || '',
@@ -132,14 +134,13 @@ const ItemDetailScreen = ({ navigation, route }) => {
         barcode: (formData.barcode || '').trim(),
         currentQuantity: parseInt(formData.currentQuantity) || 0,
         minStockLevel: parseInt(formData.minStockLevel) || 0,
-        practiceId: formData.practiceId || null,
+        assignedPracticeId: formData.practiceId || null, // The practice this item is assigned to
         practiceName: (formData.practiceName || '').trim(),
         practice: (formData.practiceName || '').trim(), // Legacy field for compatibility
         cost: parseFloat(formData.cost) || 0,
         description: (formData.description || '').trim(),
         imageUri: formData.imageUri || null,
         expiryDate: formData.expiryDate ? Timestamp.fromDate(formData.expiryDate) : null,
-        practiceId: user?.uid, // Link to user's practice
         lastUpdated: Timestamp.now(),
       };
 

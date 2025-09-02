@@ -23,6 +23,7 @@ import { db } from '../config/firebase';
 import { verifyOwnership, ensureOwnership } from '../utils/security';
 import { colors, spacing, borderRadius, typography, shadows, statusColors } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
+import { generateInventoryPDF, exportToPDF } from '../utils/pdfExporter';
 
 const InventoryListScreen = ({ navigation, route }) => {
   const dispatch = useDispatch();
@@ -74,6 +75,29 @@ const InventoryListScreen = ({ navigation, route }) => {
     setSelectedItem(item);
     setQuickActionsVisible(true);
     setAdjustmentQuantity('1');
+  };
+
+  const exportInventoryToPDF = async () => {
+    try {
+      const filteredItems = getFilteredItems();
+      
+      if (filteredItems.length === 0) {
+        Alert.alert('No Data', 'No items to export in current inventory view');
+        return;
+      }
+
+      const pdfPath = await generateInventoryPDF(filteredItems, practices, selectedPracticeId);
+      const practiceName = selectedPracticeId && selectedPracticeId !== 'all' 
+        ? practices.find(p => p.id === selectedPracticeId)?.name || 'Unknown'
+        : 'All_Practices';
+      
+      const filename = `DentalFlow_Inventory_${practiceName.replace(/\s+/g, '_')}`;
+      await exportToPDF(pdfPath, filename);
+      
+    } catch (error) {
+      console.error('Error exporting inventory PDF:', error);
+      Alert.alert('Export Error', 'Failed to export inventory as PDF');
+    }
   };
 
   const handleStockAdjustment = async (type) => {
@@ -178,8 +202,9 @@ const InventoryListScreen = ({ navigation, route }) => {
         item.barcode?.includes(searchQuery) ||
         (item.practiceName || item.practice || '').toLowerCase().includes(searchQuery.toLowerCase());
       
-      // Practice filter
-      const matchesPractice = !selectedPracticeId || item.practiceId === selectedPracticeId;
+      // Practice filter - check both new and legacy field names
+      const itemPracticeId = item.assignedPracticeId || item.practiceId;
+      const matchesPractice = !selectedPracticeId || itemPracticeId === selectedPracticeId;
       
       return matchesSearch && matchesPractice;
     });
@@ -382,7 +407,7 @@ const InventoryListScreen = ({ navigation, route }) => {
 
   // Count items for filter chips (considering practice filter)
   const practiceFilteredItems = selectedPracticeId 
-    ? items.filter(item => item.practiceId === selectedPracticeId)
+    ? items.filter(item => (item.assignedPracticeId || item.practiceId) === selectedPracticeId)
     : items;
     
   const lowStockCount = practiceFilteredItems.filter(item => item.currentQuantity <= item.minStockLevel).length;
@@ -477,8 +502,17 @@ const InventoryListScreen = ({ navigation, route }) => {
         </Chip>
       </View>
       
-      {/* Export Button */}
+      {/* Export Buttons */}
       <View style={styles.exportContainer}>
+        <Button
+          mode="outlined"
+          compact
+          onPress={exportInventoryToPDF}
+          style={styles.pdfExportButton}
+          contentStyle={styles.exportButtonContent}
+        >
+          Export PDF
+        </Button>
         <Button
           mode="outlined"
           compact
@@ -533,6 +567,7 @@ const InventoryListScreen = ({ navigation, route }) => {
         <Text style={styles.fabIcon}>-</Text>
         <Text style={styles.fabLabel}>Checkout</Text>
       </TouchableOpacity>
+      
 
       {/* Quick Actions Modal */}
       <Modal
@@ -818,9 +853,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   exportContainer: {
+    flexDirection: 'row',
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
-    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  pdfExportButton: {
+    borderColor: colors.danger || '#f44336',
   },
   exportButton: {
     borderColor: colors.success || '#4caf50',

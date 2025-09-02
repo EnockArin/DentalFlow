@@ -25,6 +25,9 @@ import TreatmentKitsScreen from '../screens/TreatmentKitsScreen';
 import TreatmentKitDetailScreen from '../screens/TreatmentKitDetailScreen';
 import PracticesScreen from '../screens/PracticesScreen';
 import StockTransferScreen from '../screens/StockTransferScreen';
+import ShoppingListAddItemScreen from '../screens/ShoppingListAddItemScreen';
+import SaveShoppingListScreen from '../screens/SaveShoppingListScreen';
+import LoadShoppingListScreen from '../screens/LoadShoppingListScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -227,6 +230,30 @@ const AppNavigator = () => {
               name="StockTransfer" 
               component={StockTransferScreen}
               options={{ title: 'Stock Transfer' }}
+            />
+            <Stack.Screen 
+              name="ShoppingListAddItem" 
+              component={ShoppingListAddItemScreen}
+              options={{ 
+                title: 'Add Item',
+                headerShown: false
+              }}
+            />
+            <Stack.Screen 
+              name="SaveShoppingList" 
+              component={SaveShoppingListScreen}
+              options={{ 
+                title: 'Save List',
+                headerShown: false
+              }}
+            />
+            <Stack.Screen 
+              name="LoadShoppingList" 
+              component={LoadShoppingListScreen}
+              options={{ 
+                title: 'Load List',
+                headerShown: false
+              }}
             />
           </>
         )}

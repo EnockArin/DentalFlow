@@ -62,11 +62,11 @@ const DashboardScreen = ({ navigation }) => {
   // Filter items based on selected practice
   const filteredItems = selectedPracticeId === 'all' 
     ? items 
-    : items.filter(item => item.practiceId === selectedPracticeId);
+    : items.filter(item => (item.assignedPracticeId || item.practiceId) === selectedPracticeId);
 
   const filteredLowStockItems = selectedPracticeId === 'all'
     ? lowStockItems
-    : lowStockItems.filter(item => item.practiceId === selectedPracticeId);
+    : lowStockItems.filter(item => (item.assignedPracticeId || item.practiceId) === selectedPracticeId);
 
   const expiringItems = filteredItems.filter(item => {
     if (!item.expiryDate) return false;
@@ -123,7 +123,7 @@ const DashboardScreen = ({ navigation }) => {
 
   // Practice-specific analytics
   const getPracticeStats = (practiceId) => {
-    const practiceItems = items.filter(item => item.practiceId === practiceId);
+    const practiceItems = items.filter(item => (item.assignedPracticeId || item.practiceId) === practiceId);
     const lowStockItems = practiceItems.filter(item => item.currentQuantity <= item.minStockLevel);
     return {
       totalItems: practiceItems.length,

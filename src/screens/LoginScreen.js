@@ -233,12 +233,6 @@ const LoginScreen = ({ navigation }) => {
             </Card.Content>
           </Card>
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Paragraph style={styles.footerText}>
-              Secure • Fast
-            </Paragraph>
-          </View>
         </View>
       </KeyboardAvoidingView>
     </GradientBackground>
@@ -351,25 +345,26 @@ const styles = StyleSheet.create({
     paddingLeft: 50,
   },
   inputWithRightIcon: {
-    paddingRight: 50,
+    paddingRight: 42,
   },
   inputIconRight: {
     position: 'absolute',
-    right: 12,
+    right: 6,
     top: '50%',
     transform: [{ translateY: -12 }],
     zIndex: 2,
     backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 2,
+    borderRadius: 8,
+    padding: 1,
   },
   passwordToggleText: {
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.medium,
     color: colors.primary,
     textAlign: 'center',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    minWidth: 32,
   },
   button: {
     marginTop: spacing.md,
