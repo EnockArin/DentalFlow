@@ -68,6 +68,13 @@ const InventoryListScreen = ({ navigation, route }) => {
     }
   }, [showCheckoutMode]);
 
+  // Auto-select single practice when there's only one practice
+  useEffect(() => {
+    if (practices && practices.length === 1 && !selectedPracticeId) {
+      setSelectedPracticeId(practices[0].id);
+    }
+  }, [practices, selectedPracticeId]);
+
   // Inventory data is now managed globally in AppNavigator
   // No need for a local listener here
 
@@ -511,7 +518,7 @@ const InventoryListScreen = ({ navigation, route }) => {
           style={styles.pdfExportButton}
           contentStyle={styles.exportButtonContent}
         >
-          Export PDF
+          PDF
         </Button>
         <Button
           mode="outlined"
@@ -520,7 +527,7 @@ const InventoryListScreen = ({ navigation, route }) => {
           style={styles.exportButton}
           contentStyle={styles.exportButtonContent}
         >
-          Export CSV
+          CSV
         </Button>
       </View>
 

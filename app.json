@@ -6,6 +6,9 @@
     "orientation": "portrait",
     "icon": "./dental-flow-app-icon.jpg",
     "scheme": "dentalflow",
+    "linking": {
+      "prefixes": ["dentalflow://"]
+    },
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "ios": {
@@ -40,12 +43,6 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
-        }
-      ],
-      [
-        "expo-barcode-scanner",
-        {
-          "cameraPermission": "Allow DentalFlow to access camera for barcode scanning."
         }
       ],
       "expo-font",

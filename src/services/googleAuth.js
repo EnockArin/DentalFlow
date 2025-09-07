@@ -2,7 +2,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 
 // Complete the authentication flow for web browsers
 WebBrowser.maybeCompleteAuthSession();
@@ -26,6 +26,55 @@ export const signInWithGoogle = async () => {
       };
     }
     
+    // Emergency fallback: Use Expo's auth proxy for immediate testing
+    if (__DEV__ === false) {
+      console.log('🚑 Emergency fallback: Using Expo auth proxy for production testing');
+      try {
+        const proxyRedirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+        if (proxyRedirectUri.startsWith('https://')) {
+          console.log('✅ Using Expo auth proxy:', proxyRedirectUri);
+          // Continue with the proxy URI instead
+          const request = new AuthSession.AuthRequest({
+            clientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
+            scopes: ['openid', 'profile', 'email'],
+            responseType: AuthSession.ResponseType.Code,
+            redirectUri: proxyRedirectUri,
+            additionalParameters: {
+              access_type: 'offline',
+            },
+          });
+          
+          const result = await request.promptAsync({
+            authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+          });
+          
+          if (result.type === 'success') {
+            // Process the auth code...
+            const { code } = result.params;
+            const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                client_id: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
+                code: code,
+                redirect_uri: proxyRedirectUri,
+                grant_type: 'authorization_code',
+              }),
+            });
+            
+            const tokens = await tokenResponse.json();
+            if (tokens.id_token) {
+              const googleCredential = GoogleAuthProvider.credential(tokens.id_token);
+              const userCredential = await signInWithCredential(auth, googleCredential);
+              return { success: true, user: userCredential.user };
+            }
+          }
+        }
+      } catch (proxyError) {
+        console.log('⚠️  Proxy fallback failed, continuing with custom scheme...');
+      }
+    }
+    
     // For mobile platforms, use a custom redirect approach that works with Firebase
     const clientId = process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID;
     
@@ -36,41 +85,71 @@ export const signInWithGoogle = async () => {
     console.log('📱 Attempting mobile Google Sign-In...');
     
     try {
-      // Check what type of redirect URI Expo generates
-      const actualRedirectUri = AuthSession.makeRedirectUri({
-        useProxy: true,
-      });
+      // Try multiple redirect URI strategies for maximum compatibility
+      let redirectUri;
+      let useDevProxy = false;
       
-      console.log('🚨 ACTUAL REDIRECT URI GENERATED:', actualRedirectUri);
+      // Strategy: Always use Expo's HTTPS proxy for Firebase compatibility
+      // Firebase Console only accepts valid HTTPS domains, not custom schemes
       
-      // Check if it's a development exp:// URI that can't be added to Firebase
-      if (actualRedirectUri.startsWith('exp://')) {
-        console.log('⚠️  DEVELOPMENT MODE DETECTED');
-        console.log('🚫 Firebase Console cannot accept exp:// URIs');
-        console.log('💡 SOLUTION: For development testing, use email/password authentication');
-        console.log('🏗️  For Google Sign-In, create a production build with: eas build');
+      try {
+        // Use Expo's auth proxy - provides HTTPS URL that Firebase accepts
+        redirectUri = AuthSession.makeRedirectUri({
+          useProxy: true,
+        });
         
-        return {
-          success: false,
-          error: 'Google Sign-In requires production build. Development uses exp:// URIs which Firebase cannot accept. Please use email/password for testing, or create a production build.',
-        };
+        console.log('🚨 GENERATED REDIRECT URI:', redirectUri);
+        
+        if (redirectUri.startsWith('https://auth.expo.io')) {
+          console.log('✅ Using Expo Auth Proxy (Firebase compatible HTTPS)');
+          useDevProxy = true;
+        } else if (redirectUri.startsWith('exp://')) {
+          // Force use of proxy for Firebase compatibility
+          console.log('🔄 Forcing HTTPS proxy for Firebase compatibility...');
+          redirectUri = 'https://auth.expo.io/@enock911/DentalFlow';
+          useDevProxy = true;
+        } else {
+          console.log('✅ Using generated HTTPS redirect URI');
+        }
+      } catch (error) {
+        console.log('🔄 Fallback to manual Expo proxy URI...');
+        
+        // Manual fallback to known Expo proxy format
+        redirectUri = 'https://auth.expo.io/@enock911/DentalFlow';
+        useDevProxy = true;
       }
+      
+      console.log('🔗 Using redirect URI:', redirectUri);
       
       console.log('🔥 ADD THIS EXACT URI TO FIREBASE CONSOLE:');
       console.log('   Firebase Console → Authentication → Google → Authorized redirect URIs');
-      console.log('   Add URI:', actualRedirectUri);
+      console.log('   Add URI:', redirectUri);
+      
+      // Show alert in production so user can see the redirect URI
+      if (!__DEV__) {
+        Alert.alert(
+          '🔥 Firebase Setup Required',
+          `Add this HTTPS URI to Firebase Console:\n\n${redirectUri}\n\nNote: Firebase requires HTTPS domains (not custom schemes).\n\nGo to: Firebase Console → Authentication → Google → Authorized redirect URIs`,
+          [{ text: 'Copy URI', onPress: () => console.log('ADD TO FIREBASE:', redirectUri) },
+           { text: 'OK', onPress: () => {} }]
+        );
+      }
+      
+      if (useDevProxy) {
+        console.log('⚠️  Development mode: Expo proxy handles the redirect');
+      } else {
+        console.log('🏗️  Production mode: Custom redirect URI required');
+      }
       
       const request = new AuthSession.AuthRequest({
         clientId: clientId,
         scopes: ['openid', 'profile', 'email'],
         responseType: AuthSession.ResponseType.Code, // Use code instead of token
-        redirectUri: actualRedirectUri,
+        redirectUri: redirectUri,
         additionalParameters: {
           access_type: 'offline',
         },
       });
-
-      console.log('🔗 Using redirect URI:', actualRedirectUri);
 
       const result = await request.promptAsync({
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -86,6 +165,13 @@ export const signInWithGoogle = async () => {
         
         if (code) {
           // Exchange code for ID token
+          console.log('🔄 Exchanging code for token...');
+          console.log('📋 Request details:', {
+            clientId: clientId.substring(0, 20) + '...',
+            redirectUri,
+            codeLength: code.length
+          });
+          
           const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: {
@@ -94,23 +180,64 @@ export const signInWithGoogle = async () => {
             body: new URLSearchParams({
               client_id: clientId,
               code: code,
-              redirect_uri: actualRedirectUri,
+              redirect_uri: redirectUri,
               grant_type: 'authorization_code',
             }),
           });
           
-          const tokens = await tokenResponse.json();
+          console.log('📊 Token response status:', tokenResponse.status);
           
-          if (tokens.id_token) {
-            // Create Firebase credential
-            const googleCredential = GoogleAuthProvider.credential(tokens.id_token);
-            
-            // Sign in to Firebase
-            const userCredential = await signInWithCredential(auth, googleCredential);
+          if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            console.error('❌ Token exchange failed:', {
+              status: tokenResponse.status,
+              statusText: tokenResponse.statusText,
+              error: errorText
+            });
             
             return {
-              success: true,
-              user: userCredential.user,
+              success: false,
+              error: `Token exchange failed (${tokenResponse.status}): ${errorText}`
+            };
+          }
+          
+          const tokens = await tokenResponse.json();
+          console.log('✅ Token exchange successful:', Object.keys(tokens));
+          
+          if (tokens.id_token) {
+            console.log('🔥 Creating Firebase credential...');
+            
+            try {
+              // Create Firebase credential
+              const googleCredential = GoogleAuthProvider.credential(tokens.id_token);
+              
+              console.log('🔐 Signing in to Firebase...');
+              
+              // Sign in to Firebase
+              const userCredential = await signInWithCredential(auth, googleCredential);
+              
+              console.log('✅ Firebase sign-in successful:', {
+                uid: userCredential.user.uid,
+                email: userCredential.user.email
+              });
+              
+              return {
+                success: true,
+                user: userCredential.user,
+              };
+            } catch (firebaseError) {
+              console.error('❌ Firebase sign-in error:', firebaseError);
+              
+              return {
+                success: false,
+                error: `Firebase authentication failed: ${firebaseError.message}`
+              };
+            }
+          } else {
+            console.error('❌ No ID token in response:', tokens);
+            return {
+              success: false,
+              error: 'No ID token received from Google'
             };
           }
         }

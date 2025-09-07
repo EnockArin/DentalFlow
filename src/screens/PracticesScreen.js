@@ -283,7 +283,6 @@ const PracticesScreen = ({ navigation }) => {
         </View>
       ) : filteredPractices.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🦷</Text>
           <Title style={styles.emptyTitle}>No Practices</Title>
           <Paragraph style={styles.emptyText}>
             Create at least one practice to organize and manage your inventory
@@ -489,10 +488,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: spacing.lg,
   },
   emptyTitle: {
     fontSize: typography.fontSize.xl,

@@ -30,16 +30,14 @@ const ShoppingListScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState('1');
+  const [newItemCost, setNewItemCost] = useState('');
   const [newItemNotes, setNewItemNotes] = useState('');
   
   // Saved shopping lists states
   const [savedLists, setSavedLists] = useState([]);
   const [listName, setListName] = useState('');
   
-  // Quantity editing states
-  const [quantityEditModalVisible, setQuantityEditModalVisible] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [editQuantity, setEditQuantity] = useState('');
+  // Removed quantity editing modal states - now using dedicated screen
   const [customQuantities, setCustomQuantities] = useState({}); // Store custom quantities for low stock items
   
   // Multi-item addition states
@@ -60,6 +58,28 @@ const ShoppingListScreen = ({ navigation }) => {
     item.currentQuantity > 0 && item.currentQuantity <= item.minStockLevel * 0.5
   );
 
+  // Calculate total estimated cost
+  const calculateTotalCost = () => {
+    let total = 0;
+    
+    // Add costs from low stock items
+    lowStockItems.forEach(item => {
+      const suggestedQuantity = customQuantities[item.id] || Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
+      const unitCost = item.cost || item.unitCost || 0;
+      total += suggestedQuantity * unitCost;
+    });
+    
+    // Add costs from manual items
+    manualItems.forEach(item => {
+      const unitCost = item.cost || item.unitCost || 0;
+      total += item.quantity * unitCost;
+    });
+    
+    return total;
+  };
+
+  const totalEstimatedCost = calculateTotalCost();
+
   // Combine low stock items with manual items
   const combinedShoppingList = [
     ...lowStockItems.map(item => ({ ...item, type: 'lowstock' })),
@@ -72,12 +92,154 @@ const ShoppingListScreen = ({ navigation }) => {
   }, []);
 
   // Callback functions for new screen
-  const handleAddManualItem = (newItem) => {
-    setManualItems(prev => [...prev, newItem]);
+  const handleAddManualItem = (newItem, callback = null) => {
+    // Check for duplicates in manual items
+    const existingManualItem = manualItems.find(item => {
+      // Check by product name (case insensitive)
+      const nameMatch = item.productName.toLowerCase().trim() === newItem.productName.toLowerCase().trim();
+      // Check by barcode if both items have barcodes
+      const barcodeMatch = item.barcode && newItem.barcode && item.barcode === newItem.barcode;
+      return nameMatch || barcodeMatch;
+    });
+
+    // Also check if item already exists in low stock items (from inventory)
+    const existingLowStockItem = lowStockItems.find(item => {
+      const nameMatch = item.productName.toLowerCase().trim() === newItem.productName.toLowerCase().trim();
+      const barcodeMatch = item.barcode && newItem.barcode && item.barcode === newItem.barcode;
+      return nameMatch || barcodeMatch;
+    });
+
+    const existingItem = existingManualItem || existingLowStockItem;
+
+    if (existingItem) {
+      if (existingLowStockItem) {
+        // Item exists in low stock items (from inventory)
+        const currentQty = customQuantities[existingLowStockItem.id] || Math.max(existingLowStockItem.minStockLevel * 2 - existingLowStockItem.currentQuantity, existingLowStockItem.minStockLevel);
+        Alert.alert(
+          'Item Already in Low Stock List',
+          `"${newItem.productName}" is already in your shopping list from low stock inventory.\n\nCurrent planned quantity: ${currentQty}\nQuantity to add: ${newItem.quantity}\n\nWould you like to update the planned quantity?`,
+          [
+            {
+              text: 'Add to Manual Items',
+              onPress: () => {
+                setManualItems(prev => [...prev, newItem]);
+                if (callback) callback(true);
+              }
+            },
+            {
+              text: 'Update Planned Quantity',
+              onPress: () => {
+                const newQty = currentQty + newItem.quantity;
+                setCustomQuantities(prev => ({
+                  ...prev,
+                  [existingLowStockItem.id]: newQty
+                }));
+                Alert.alert('Success', `Updated planned quantity for "${existingItem.productName}" to ${newQty}`);
+                if (callback) callback(true);
+              }
+            }
+          ]
+        );
+      } else {
+        // Item exists in manual items
+        Alert.alert(
+          'Duplicate Item Found',
+          `"${newItem.productName}" is already in your shopping list with quantity ${existingItem.quantity}.\n\nWould you like to update the quantity instead of adding a separate entry?`,
+          [
+            {
+              text: 'Add Separately',
+              onPress: () => {
+                setManualItems(prev => [...prev, newItem]);
+                if (callback) callback(true);
+              }
+            },
+            {
+              text: 'Update Quantity',
+              onPress: () => {
+                promptQuantityUpdate(existingItem, newItem, callback);
+              }
+            }
+          ]
+        );
+      }
+    } else {
+      setManualItems(prev => [...prev, newItem]);
+      if (callback) callback(true);
+    }
+  };
+
+  const promptQuantityUpdate = (existingItem, newItem, callback = null) => {
+    const suggestedQuantity = existingItem.quantity + newItem.quantity;
+    
+    Alert.alert(
+      'Update Quantity',
+      `Current quantity: ${existingItem.quantity}\nQuantity to add: ${newItem.quantity}\n\nHow would you like to update the quantity?`,
+      [
+        {
+          text: 'Set to New Total',
+          onPress: () => {
+            updateItemQuantity(existingItem, suggestedQuantity);
+            if (callback) callback(true);
+          }
+        },
+        {
+          text: 'Replace with New',
+          onPress: () => {
+            updateItemQuantity(existingItem, newItem.quantity);
+            if (callback) callback(true);
+          }
+        },
+        {
+          text: 'Enter Custom',
+          onPress: () => {
+            promptCustomQuantity(existingItem, suggestedQuantity, callback);
+          }
+        }
+      ]
+    );
+  };
+
+  const promptCustomQuantity = (existingItem, suggestedQuantity, callback = null) => {
+    Alert.prompt(
+      'Enter Quantity',
+      `Enter the new quantity for "${existingItem.productName}"`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => { if (callback) callback(false); } },
+        {
+          text: 'Update',
+          onPress: (text) => {
+            const quantity = parseInt(text);
+            if (isNaN(quantity) || quantity <= 0) {
+              Alert.alert('Invalid Input', 'Please enter a valid positive number.');
+              if (callback) callback(false);
+              return;
+            }
+            updateItemQuantity(existingItem, quantity);
+            if (callback) callback(true);
+          }
+        }
+      ],
+      'plain-text',
+      suggestedQuantity.toString()
+    );
+  };
+
+  const updateItemQuantity = (existingItem, newQuantity) => {
+    setManualItems(prev => 
+      prev.map(item => 
+        item.id === existingItem.id 
+          ? { ...item, quantity: newQuantity }
+          : item
+      )
+    );
+    Alert.alert('Success', `Updated "${existingItem.productName}" quantity to ${newQuantity}`);
   };
 
   const handleAddMultipleItems = (newItems) => {
-    setManualItems(prev => [...prev, ...newItems]);
+    // Process each item individually to check for duplicates
+    newItems.forEach(newItem => {
+      setTimeout(() => handleAddManualItem(newItem), 100); // Small delay to avoid conflicts
+    });
   };
 
   const handleSaveList = async (newSavedList) => {
@@ -109,16 +271,19 @@ const ShoppingListScreen = ({ navigation }) => {
     }
 
     const quantity = parseInt(newItemQuantity) || 1;
+    const cost = parseFloat(newItemCost) || 0;
     const newItem = {
       id: `manual_${Date.now()}`,
       productName: newItemName.trim(),
       quantity: quantity,
+      cost: cost,
       notes: newItemNotes.trim(),
       type: 'manual',
       dateAdded: new Date().toISOString()
     };
 
-    setManualItems(prev => [...prev, newItem]);
+    // Use handleAddManualItem to check for duplicates
+    handleAddManualItem(newItem);
     resetModalForms();
     setAddItemModalVisible(false);
   };
@@ -126,6 +291,7 @@ const ShoppingListScreen = ({ navigation }) => {
   const resetModalForms = () => {
     setNewItemName('');
     setNewItemQuantity('1');
+    setNewItemCost('');
     setNewItemNotes('');
     setSearchQuery('');
   };
@@ -151,14 +317,14 @@ const ShoppingListScreen = ({ navigation }) => {
     });
   };
 
-  const updateItemQuantity = (itemId, quantity) => {
+  const updateMultiItemQuantity = (itemId, quantity) => {
     setMultiItemQuantities(prev => ({
       ...prev,
       [itemId]: quantity
     }));
   };
 
-  const addMultipleItemsToList = () => {
+  const addMultipleItemsToList = async () => {
     if (selectedItems.length === 0) {
       Alert.alert('No Items Selected', 'Please select at least one item to add.');
       return;
@@ -174,12 +340,20 @@ const ShoppingListScreen = ({ navigation }) => {
       originalItem: item
     }));
 
-    setManualItems(prev => [...prev, ...newItems]);
+    // Process each item through duplicate detection
+    let addedCount = 0;
+    for (const newItem of newItems) {
+      const result = await new Promise((resolve) => {
+        handleAddManualItem(newItem, resolve);
+      });
+      if (result) addedCount++;
+    }
+    
     setSelectedItems([]);
     setMultiItemQuantities({});
     setMultiItemModalVisible(false);
     
-    Alert.alert('Success', `Added ${newItems.length} items to your shopping list.`);
+    Alert.alert('Success', `Processed ${newItems.length} items. ${addedCount} items added to your shopping list.`);
   };
 
   const resetMultiItemModal = () => {
@@ -269,7 +443,7 @@ const ShoppingListScreen = ({ navigation }) => {
       }
 
       // CSV Header
-      let csvContent = 'Product Name,Type,Current Quantity,Min Stock Level,Suggested/Required Quantity,Priority,Location,Barcode,Notes\n';
+      let csvContent = 'Product Name,Type,Current Quantity,Min Stock Level,Suggested/Required Quantity,Unit Cost,Total Cost,Priority,Location,Barcode,Notes\n';
       
       // CSV Data
       combinedShoppingList.forEach(item => {
@@ -279,8 +453,10 @@ const ShoppingListScreen = ({ navigation }) => {
           const notes = (item.notes || '').replace(/"/g, '""');
           const location = (item.location || '').replace(/"/g, '""');
           const barcode = item.barcode || '';
+          const unitCost = (item.cost || item.unitCost || 0).toFixed(2);
+          const totalCost = (item.quantity * (item.cost || item.unitCost || 0)).toFixed(2);
           
-          csvContent += `${escapedName},"Manual","-","-","${item.quantity}","Manual","${location}","${barcode}","${notes}"\n`;
+          csvContent += `${escapedName},"Manual","-","-","${item.quantity}","£${unitCost}","£${totalCost}","Manual","${location}","${barcode}","${notes}"\n`;
         } else {
           // Low stock items
           const escapedName = `"${item.productName.replace(/"/g, '""')}"`;
@@ -289,8 +465,10 @@ const ShoppingListScreen = ({ navigation }) => {
           const suggestedOrder = customQuantities[item.id] || Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
           const location = (item.locationName || item.location || '').replace(/"/g, '""');
           const barcode = item.barcode || '';
+          const unitCost = (item.cost || item.unitCost || 0).toFixed(2);
+          const totalCost = (suggestedOrder * (item.cost || item.unitCost || 0)).toFixed(2);
           
-          csvContent += `${escapedName},"Low Stock","${item.currentQuantity}","${item.minStockLevel}","${suggestedOrder}","${priorityLabel}","${location}","${barcode}",""\n`;
+          csvContent += `${escapedName},"Low Stock","${item.currentQuantity}","${item.minStockLevel}","${suggestedOrder}","£${unitCost}","£${totalCost}","${priorityLabel}","${location}","${barcode}",""\n`;
         }
       });
 
@@ -345,46 +523,31 @@ const ShoppingListScreen = ({ navigation }) => {
 
 
   // Quantity editing functions
-  const openQuantityEditor = (item) => {
-    setEditingItem(item);
+  const handleQuantityUpdate = (item, newQuantity) => {
     if (item.type === 'manual') {
-      setEditQuantity(item.quantity.toString());
-    } else {
-      // For low stock items, use custom quantity if set, otherwise use suggested order quantity
-      const customQty = customQuantities[item.id];
-      const suggestedOrder = Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
-      setEditQuantity((customQty || suggestedOrder).toString());
-    }
-    setQuantityEditModalVisible(true);
-  };
-
-  const updateSingleItemQuantity = () => {
-    if (!editQuantity.trim() || isNaN(parseInt(editQuantity)) || parseInt(editQuantity) <= 0) {
-      Alert.alert('Invalid Quantity', 'Please enter a valid positive number');
-      return;
-    }
-
-    const newQuantity = parseInt(editQuantity);
-
-    if (editingItem.type === 'manual') {
       // Update manual item quantity
-      setManualItems(prev => prev.map(item => 
-        item.id === editingItem.id 
-          ? { ...item, quantity: newQuantity }
-          : item
+      setManualItems(prev => prev.map(manualItem => 
+        manualItem.id === item.id 
+          ? { ...manualItem, quantity: newQuantity }
+          : manualItem
       ));
     } else {
-      // For low stock items, store custom quantity in the customQuantities state
+      // Update low stock item custom quantity
       setCustomQuantities(prev => ({
         ...prev,
-        [editingItem.id]: newQuantity
+        [item.id]: newQuantity
       }));
     }
-
-    setQuantityEditModalVisible(false);
-    setEditingItem(null);
-    setEditQuantity('');
   };
+
+  const openQuantityEditor = (item) => {
+    navigation.navigate('EditQuantity', {
+      item: item,
+      onUpdate: handleQuantityUpdate
+    });
+  };
+
+  // Removed updateSingleItemQuantity - now handled by handleQuantityUpdate
 
   const handleShareShoppingList = async () => {
     try {
@@ -440,7 +603,15 @@ const ShoppingListScreen = ({ navigation }) => {
             <View style={styles.itemDetails}>
               <Text style={styles.stockInfo}>
                 Quantity: {item.quantity}
+                {(item.cost || item.unitCost) && (
+                  <Text style={styles.costInfo}> • Unit Cost: £{((item.cost || item.unitCost) || 0).toFixed(2)}</Text>
+                )}
               </Text>
+              {(item.cost || item.unitCost) && (
+                <Text style={styles.totalCostInfo}>
+                  Total Cost: £{(item.quantity * ((item.cost || item.unitCost) || 0)).toFixed(2)}
+                </Text>
+              )}
               <Button
                 mode="outlined"
                 compact
@@ -482,7 +653,7 @@ const ShoppingListScreen = ({ navigation }) => {
               <Chip 
                 mode="outlined" 
                 style={[styles.priorityChip, { borderColor: getPriorityColor(priority) }]}
-                textStyle={{ color: getPriorityColor(priority), fontSize: 10 }}
+                textStyle={{ color: getPriorityColor(priority), fontSize: 12, fontWeight: '600' }}
               >
                 {getPriorityLabel(priority)}
               </Chip>
@@ -491,10 +662,18 @@ const ShoppingListScreen = ({ navigation }) => {
             <View style={styles.itemDetails}>
               <Text style={styles.stockInfo}>
                 Current: {item.currentQuantity} | Min: {item.minStockLevel}
+                {(item.cost || item.unitCost) && (
+                  <Text style={styles.costInfo}> • Unit Cost: £{((item.cost || item.unitCost) || 0).toFixed(2)}</Text>
+                )}
               </Text>
               <Text style={styles.suggestion}>
                 Suggested order: {customQuantities[item.id] || suggestedOrder} units
               </Text>
+              {(item.cost || item.unitCost) && (
+                <Text style={styles.totalCostInfo}>
+                  Estimated Cost: £{((customQuantities[item.id] || suggestedOrder) * ((item.cost || item.unitCost) || 0)).toFixed(2)}
+                </Text>
+              )}
               <Button
                 mode="outlined"
                 compact
@@ -560,6 +739,14 @@ const ShoppingListScreen = ({ navigation }) => {
               </Text>
               <Text style={styles.summaryLabel}>Manual</Text>
             </View>
+            {totalEstimatedCost > 0 && (
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryNumber, { color: '#4caf50' }]}>
+                  £{totalEstimatedCost.toFixed(0)}
+                </Text>
+                <Text style={styles.summaryLabel}>Est. Cost</Text>
+              </View>
+            )}
           </View>
 
           {combinedShoppingList.length > 0 && (
@@ -588,14 +775,14 @@ const ShoppingListScreen = ({ navigation }) => {
                 onPress={exportShoppingListToPDF}
                 style={[styles.summaryButton, styles.pdfExportButton]}
               >
-                Export PDF
+                PDF
               </Button>
               <Button
                 mode="outlined"
                 onPress={exportShoppingListToCSV}
                 style={[styles.summaryButton, styles.csvExportButton]}
               >
-                Export CSV
+                CSV
               </Button>
             </View>
           )}
@@ -721,19 +908,38 @@ const ShoppingListScreen = ({ navigation }) => {
                     right={null}
                   />
 
-                  <CustomTextInput
-                    label="Quantity"
-                    value={newItemQuantity}
-                    onChangeText={setNewItemQuantity}
-                    mode="outlined"
-                    keyboardType="numeric"
-                    style={styles.input}
-                    autoComplete="off"
-                    textContentType="none"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    right={null}
-                  />
+                  <View style={styles.rowInputs}>
+                    <CustomTextInput
+                      label="Quantity"
+                      value={newItemQuantity}
+                      onChangeText={setNewItemQuantity}
+                      mode="outlined"
+                      keyboardType="number-pad"
+                      style={[styles.input, styles.halfInput]}
+                      autoComplete="off"
+                      textContentType="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      right={null}
+                      selectTextOnFocus={true}
+                      clearTextOnFocus={false}
+                      placeholder="1"
+                    />
+                    <CustomTextInput
+                      label="Unit Cost (£)"
+                      value={newItemCost}
+                      onChangeText={setNewItemCost}
+                      mode="outlined"
+                      keyboardType="decimal-pad"
+                      style={[styles.input, styles.halfInput]}
+                      placeholder="0.00"
+                      autoComplete="off"
+                      textContentType="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      right={null}
+                    />
+                  </View>
 
                   <CustomTextInput
                     label="Notes (optional)"
@@ -777,83 +983,7 @@ const ShoppingListScreen = ({ navigation }) => {
 
 
 
-      {/* Edit Quantity Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={quantityEditModalVisible}
-        onRequestClose={() => setQuantityEditModalVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setQuantityEditModalVisible(false)}
-        >
-          <TouchableOpacity 
-            activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Surface style={styles.modalSurface}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Title style={styles.modalTitle}>
-                    Edit {editingItem?.type === 'manual' ? 'Quantity' : 'Suggested Order'}
-                  </Title>
-                  <Paragraph style={styles.modalSubtitle}>
-                    {editingItem?.productName}
-                  </Paragraph>
-                </View>
-
-                <CustomTextInput
-                  label={editingItem?.type === 'manual' ? 'Quantity' : 'Suggested Order Quantity'}
-                  value={editQuantity}
-                  onChangeText={setEditQuantity}
-                  mode="outlined"
-                  keyboardType="numeric"
-                  style={styles.input}
-                  autoComplete="off"
-                  textContentType="none"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  right={null}
-                />
-
-                {editingItem?.type !== 'manual' && (
-                  <View style={styles.quantityInfo}>
-                    <Text style={styles.quantityInfoTitle}>Item Details:</Text>
-                    <Text style={styles.quantityInfoText}>Current Stock: {editingItem?.currentQuantity}</Text>
-                    <Text style={styles.quantityInfoText}>Minimum Level: {editingItem?.minStockLevel}</Text>
-                    <Text style={styles.quantityInfoText}>
-                      Default Suggestion: {editingItem ? Math.max(editingItem.minStockLevel * 2 - editingItem.currentQuantity, editingItem.minStockLevel) : 0}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.modalButtons}>
-                  <Button
-                    mode="outlined"
-                    onPress={() => {
-                      setQuantityEditModalVisible(false);
-                      setEditingItem(null);
-                      setEditQuantity('');
-                    }}
-                    style={styles.cancelButton}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    mode="contained"
-                    onPress={updateSingleItemQuantity}
-                    style={styles.addButton}
-                  >
-                    Update
-                  </Button>
-                </View>
-              </View>
-            </Surface>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+      {/* Edit Quantity Modal removed - now using dedicated screen */}
 
       {/* Multi-Item Selection Modal */}
       <Modal
@@ -932,13 +1062,16 @@ const ShoppingListScreen = ({ navigation }) => {
                         <Text style={styles.quantityLabel}>Qty:</Text>
                         <CustomTextInput
                           value={multiItemQuantities[item.id] || '1'}
-                          onChangeText={(value) => updateItemQuantity(item.id, value)}
-                          keyboardType="numeric"
+                          onChangeText={(value) => updateMultiItemQuantity(item.id, value)}
+                          keyboardType="number-pad"
                           style={styles.quantityInput}
                           autoComplete="off"
                           textContentType="none"
                           autoCorrect={false}
                           spellCheck={false}
+                          selectTextOnFocus={true}
+                          clearTextOnFocus={false}
+                          placeholder="1"
                         />
                       </View>
                     )}
@@ -1081,7 +1214,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   priorityChip: {
-    height: 24,
+    height: 32,
+    minHeight: 32,
   },
   itemDetails: {
     marginBottom: 12,
@@ -1106,6 +1240,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888',
     fontFamily: 'monospace',
+  },
+  costInfo: {
+    fontSize: 12,
+    color: '#4caf50',
+    fontWeight: '500',
+  },
+  totalCostInfo: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4caf50',
+    marginBottom: 4,
+  },
+  rowInputs: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  halfInput: {
+    flex: 1,
   },
   quantityButton: {
     borderColor: colors.primary || '#2196F3',

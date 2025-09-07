@@ -8,7 +8,6 @@ import { auth, db } from '../config/firebase';
 import { loginSuccess, logout } from '../store/slices/authSlice';
 import { setItems, setLoading } from '../store/slices/inventorySlice';
 import { setPractices, setLoading as setPracticesLoading } from '../store/slices/practicesSlice';
-import { signOutFromGoogle } from '../services/googleAuth';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
@@ -23,11 +22,14 @@ import ShoppingListScreen from '../screens/ShoppingListScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import TreatmentKitsScreen from '../screens/TreatmentKitsScreen';
 import TreatmentKitDetailScreen from '../screens/TreatmentKitDetailScreen';
+import TreatmentKitAddFromInventoryScreen from '../screens/TreatmentKitAddFromInventoryScreen';
+import TreatmentKitAddManualItemScreen from '../screens/TreatmentKitAddManualItemScreen';
 import PracticesScreen from '../screens/PracticesScreen';
 import StockTransferScreen from '../screens/StockTransferScreen';
 import ShoppingListAddItemScreen from '../screens/ShoppingListAddItemScreen';
 import SaveShoppingListScreen from '../screens/SaveShoppingListScreen';
 import LoadShoppingListScreen from '../screens/LoadShoppingListScreen';
+import EditQuantityScreen from '../screens/EditQuantityScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -222,6 +224,16 @@ const AppNavigator = () => {
               })}
             />
             <Stack.Screen 
+              name="TreatmentKitAddFromInventory" 
+              component={TreatmentKitAddFromInventoryScreen}
+              options={{ title: 'Add from Inventory' }}
+            />
+            <Stack.Screen 
+              name="TreatmentKitAddManualItem" 
+              component={TreatmentKitAddManualItemScreen}
+              options={{ title: 'Add Manual Item' }}
+            />
+            <Stack.Screen 
               name="Practices" 
               component={PracticesScreen}
               options={{ title: 'Practices' }}
@@ -253,6 +265,14 @@ const AppNavigator = () => {
               options={{ 
                 title: 'Load List',
                 headerShown: false
+              }}
+            />
+            <Stack.Screen 
+              name="EditQuantity" 
+              component={EditQuantityScreen}
+              options={{ 
+                title: 'Edit Quantity',
+                headerShown: true
               }}
             />
           </>

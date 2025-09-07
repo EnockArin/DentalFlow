@@ -27,6 +27,7 @@ const ShoppingListAddItemScreen = ({ navigation, route }) => {
   // Manual entry states
   const [newItemName, setNewItemName] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState('1');
+  const [newItemCost, setNewItemCost] = useState('');
   const [newItemNotes, setNewItemNotes] = useState('');
   
   // Multi-item selection states
@@ -39,6 +40,7 @@ const ShoppingListAddItemScreen = ({ navigation, route }) => {
   const resetManualForm = () => {
     setNewItemName('');
     setNewItemQuantity('1');
+    setNewItemCost('');
     setNewItemNotes('');
   };
 
@@ -55,10 +57,12 @@ const ShoppingListAddItemScreen = ({ navigation, route }) => {
     }
 
     const quantity = parseInt(newItemQuantity) || 1;
+    const cost = parseFloat(newItemCost) || 0;
     const newItem = {
       id: `manual_${Date.now()}`,
       productName: newItemName.trim(),
       quantity: quantity,
+      cost: cost,
       notes: newItemNotes.trim(),
       type: 'manual',
       dateAdded: new Date().toISOString()
@@ -110,6 +114,7 @@ const ShoppingListAddItemScreen = ({ navigation, route }) => {
       id: `manual_${Date.now()}_${item.id}`,
       productName: item.productName,
       quantity: parseInt(multiItemQuantities[item.id]) || 1,
+      cost: item.cost || item.unitCost || 0,
       notes: `From inventory: ${item.description || 'No description'}`,
       type: 'manual',
       dateAdded: new Date().toISOString(),
@@ -126,7 +131,14 @@ const ShoppingListAddItemScreen = ({ navigation, route }) => {
   };
 
   const handleScanBarcode = () => {
-    navigation.navigate('Scanner');
+    navigation.navigate('Scanner', {
+      forShoppingList: true,
+      onAddToShoppingList: (newItem) => {
+        if (onAddManualItem) {
+          onAddManualItem(newItem);
+        }
+      }
+    });
   };
 
   const renderOptionsView = () => (
@@ -225,19 +237,35 @@ const ShoppingListAddItemScreen = ({ navigation, route }) => {
           right={null}
         />
 
-        <CustomTextInput
-          label="Quantity"
-          value={newItemQuantity}
-          onChangeText={setNewItemQuantity}
-          mode="outlined"
-          keyboardType="numeric"
-          style={styles.input}
-          autoComplete="off"
-          textContentType="none"
-          autoCorrect={false}
-          spellCheck={false}
-          right={null}
-        />
+        <View style={styles.rowInputs}>
+          <CustomTextInput
+            label="Quantity"
+            value={newItemQuantity}
+            onChangeText={setNewItemQuantity}
+            mode="outlined"
+            keyboardType="numeric"
+            style={[styles.input, styles.halfInput]}
+            autoComplete="off"
+            textContentType="none"
+            autoCorrect={false}
+            spellCheck={false}
+            right={null}
+          />
+          <CustomTextInput
+            label="Unit Cost (£)"
+            value={newItemCost}
+            onChangeText={setNewItemCost}
+            mode="outlined"
+            keyboardType="decimal-pad"
+            style={[styles.input, styles.halfInput]}
+            placeholder="0.00"
+            autoComplete="off"
+            textContentType="none"
+            autoCorrect={false}
+            spellCheck={false}
+            right={null}
+          />
+        </View>
 
         <CustomTextInput
           label="Notes (optional)"
@@ -337,6 +365,9 @@ const ShoppingListAddItemScreen = ({ navigation, route }) => {
                   </Text>
                   <Text style={styles.multiItemStock}>
                     Stock: {item.currentQuantity}
+                    {(item.cost || item.unitCost) && (
+                      <Text style={styles.multiItemCost}> • Unit Cost: £{((item.cost || item.unitCost) || 0).toFixed(2)}</Text>
+                    )}
                   </Text>
                 </View>
                 
@@ -528,6 +559,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     backgroundColor: colors.surface,
   },
+  rowInputs: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  halfInput: {
+    flex: 1,
+    backgroundColor: colors.surface,
+  },
   buttonContainer: {
     gap: spacing.md,
   },
@@ -603,6 +643,11 @@ const styles = StyleSheet.create({
   multiItemStock: {
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
+  },
+  multiItemCost: {
+    fontSize: typography.fontSize.xs,
+    color: colors.success || '#4caf50',
+    fontWeight: typography.fontWeight.medium,
   },
   quantityInputContainer: {
     flexDirection: 'row',

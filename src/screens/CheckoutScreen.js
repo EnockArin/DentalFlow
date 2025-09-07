@@ -26,6 +26,9 @@ const CheckoutScreen = ({ navigation, route }) => {
   const { items, loading } = useSelector((state) => state.inventory);
   const { user } = useSelector((state) => state.auth);
   
+  // Check for scanned item from barcode scanner
+  const { scannedItem, barcode } = route.params || {};
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -49,6 +52,16 @@ const CheckoutScreen = ({ navigation, route }) => {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  // Handle scanned item from barcode scanner
+  useEffect(() => {
+    if (scannedItem) {
+      // Automatically open the quantity modal for the scanned item
+      setSelectedItem(scannedItem);
+      setCheckoutQuantity('1');
+      setQuantityModalVisible(true);
+    }
+  }, [scannedItem]);
 
   // Filter and search items
   const filteredItems = items.filter(item => {

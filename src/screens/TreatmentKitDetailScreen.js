@@ -38,8 +38,12 @@ const TreatmentKitDetailScreen = ({ navigation, route }) => {
   const [saving, setSaving] = useState(false);
   const [itemSearchQuery, setItemSearchQuery] = useState('');
   const [showItemPicker, setShowItemPicker] = useState(false);
+  const [showManualItemDialog, setShowManualItemDialog] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState(null);
   const [editQuantity, setEditQuantity] = useState('');
+  const [manualItemName, setManualItemName] = useState('');
+  const [manualItemQuantity, setManualItemQuantity] = useState('1');
+  const [manualItemUnit, setManualItemUnit] = useState('unit');
 
   const predefinedTemplates = [
     {
@@ -112,6 +116,26 @@ const TreatmentKitDetailScreen = ({ navigation, route }) => {
     };
   }, [dispatch]);
 
+  // Handle new item added from navigation
+  useEffect(() => {
+    const newItem = route.params?.newItem;
+    if (newItem) {
+      const existingIndex = selectedItems.findIndex(item => 
+        (newItem.inventoryId && item.inventoryId === newItem.inventoryId) ||
+        (!newItem.inventoryId && item.name.toLowerCase() === newItem.name.toLowerCase())
+      );
+      
+      if (existingIndex >= 0) {
+        Alert.alert('Item Already Added', 'This item is already in the kit. You can edit its quantity.');
+      } else {
+        setSelectedItems(prev => [...prev, newItem]);
+      }
+      
+      // Clear the newItem parameter to prevent re-adding
+      navigation.setParams({ newItem: undefined });
+    }
+  }, [route.params?.newItem, selectedItems, navigation]);
+
   const handleAddItem = (inventoryItem) => {
     const existingIndex = selectedItems.findIndex(item => item.inventoryId === inventoryItem.id);
     
@@ -130,6 +154,39 @@ const TreatmentKitDetailScreen = ({ navigation, route }) => {
     
     setShowItemPicker(false);
     setItemSearchQuery('');
+  };
+
+  const handleAddManualItem = () => {
+    if (!manualItemName.trim()) {
+      Alert.alert('Invalid Item', 'Please enter an item name');
+      return;
+    }
+    
+    if (!manualItemQuantity || isNaN(parseInt(manualItemQuantity)) || parseInt(manualItemQuantity) <= 0) {
+      Alert.alert('Invalid Quantity', 'Please enter a valid positive number');
+      return;
+    }
+    
+    const existingIndex = selectedItems.findIndex(item => item.name.toLowerCase() === manualItemName.trim().toLowerCase());
+    
+    if (existingIndex >= 0) {
+      Alert.alert('Item Already Added', 'An item with this name is already in the kit.');
+      return;
+    }
+    
+    setSelectedItems([...selectedItems, {
+      inventoryId: null, // Manual items don't have inventory ID
+      name: manualItemName.trim(),
+      quantity: parseInt(manualItemQuantity),
+      unit: manualItemUnit,
+      category: 'Manual'
+    }]);
+    
+    // Reset form
+    setManualItemName('');
+    setManualItemQuantity('1');
+    setManualItemUnit('unit');
+    setShowManualItemDialog(false);
   };
 
   const handleRemoveItem = (index) => {
@@ -389,21 +446,36 @@ const TreatmentKitDetailScreen = ({ navigation, route }) => {
           <Card.Content>
             <View style={styles.itemsHeader}>
               <Title style={styles.sectionTitle}>Kit Items ({selectedItems.length})</Title>
+            </View>
+            
+            <View style={styles.addButtonsContainer}>
               <Button
                 mode="contained"
-                onPress={() => setShowItemPicker(true)}
-                icon="plus"
-                compact
+                onPress={() => navigation.navigate('TreatmentKitAddFromInventory', { 
+                  selectedItems, 
+                  kitId: route.params?.kitId 
+                })}
                 buttonColor={colors.primary}
+                style={styles.addButton}
               >
-                Add Item
+                Add from Inventory
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={() => navigation.navigate('TreatmentKitAddManualItem', { 
+                  selectedItems, 
+                  kitId: route.params?.kitId 
+                })}
+                style={styles.addButton}
+              >
+                Add Manual Item
               </Button>
             </View>
             
             {selectedItems.length === 0 ? (
               <View style={styles.emptyItems}>
                 <Text style={styles.emptyText}>No items added yet</Text>
-                <Text style={styles.emptySubtext}>Tap "Add Item" to select from inventory</Text>
+                <Text style={styles.emptySubtext}>Add items from inventory or create manual items</Text>
               </View>
             ) : (
               <FlatList
@@ -465,6 +537,40 @@ const TreatmentKitDetailScreen = ({ navigation, route }) => {
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setShowItemPicker(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={showManualItemDialog} onDismiss={() => setShowManualItemDialog(false)} style={styles.dialog}>
+          <Dialog.Title>Add Manual Item</Dialog.Title>
+          <Dialog.Content style={styles.dialogContent}>
+            <CustomTextInput
+              label="Item Name"
+              value={manualItemName}
+              onChangeText={setManualItemName}
+              placeholder="Enter item name"
+              style={styles.input}
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <CustomTextInput
+                label="Quantity"
+                value={manualItemQuantity}
+                onChangeText={setManualItemQuantity}
+                placeholder="1"
+                keyboardType="numeric"
+                style={[styles.input, { flex: 1 }]}
+              />
+              <CustomTextInput
+                label="Unit"
+                value={manualItemUnit}
+                onChangeText={setManualItemUnit}
+                placeholder="unit"
+                style={[styles.input, { flex: 1 }]}
+              />
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowManualItemDialog(false)}>Cancel</Button>
+            <Button onPress={handleAddManualItem} mode="contained">Add Item</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -635,6 +741,16 @@ const styles = StyleSheet.create({
   inventoryItem: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  addButtonsContainer: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+  addButton: {
+    flex: 1,
+    borderRadius: borderRadius.md,
   },
 });
 

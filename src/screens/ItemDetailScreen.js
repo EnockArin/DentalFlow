@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, Text, Animated } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { 
   Button, 
   Card, 
@@ -8,14 +9,17 @@ import {
   Paragraph,
   Surface,
   Chip,
-  TextInput
+  TextInput,
+  Dialog,
+  Portal
 } from 'react-native-paper';
 import CustomTextInput from '../components/common/CustomTextInput';
 import PracticePicker from '../components/common/PracticePicker';
 import PracticeEnforcement from '../components/common/PracticeEnforcement';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
-import { addDoc, collection, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { addDoc, collection, updateDoc, doc, Timestamp, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from '../config/firebase';
 import { verifyOwnership, ensureOwnership } from '../utils/security';
 import { useSelector } from 'react-redux';
 import { colors, spacing, borderRadius, typography, shadows, components } from '../constants/theme';
@@ -26,6 +30,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
   const { practices } = useSelector((state) => state.practices);
   const item = route.params?.item;
   const scannedBarcode = route.params?.barcode;
+  const apiData = route.params?.apiData;
   const isEditing = !!item;
 
   const [formData, setFormData] = useState({
@@ -43,11 +48,13 @@ const ItemDetailScreen = ({ navigation, route }) => {
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
 
-  // Initialize form data when editing
+  // Initialize form data when editing or with API data
   useEffect(() => {
     if (item) {
       setFormData({
@@ -62,12 +69,31 @@ const ItemDetailScreen = ({ navigation, route }) => {
         imageUri: item.imageUri || null,
         expiryDate: item.expiryDate || null,
       });
+    } else if (apiData && apiData.success) {
+      // Pre-populate with API data for new items
+      setFormData(prev => ({
+        ...prev,
+        productName: apiData.productName || route.params?.productName || '',
+        description: apiData.description || route.params?.description || '',
+        barcode: scannedBarcode || '',
+        // Set some reasonable defaults for new items from API
+        currentQuantity: '1',
+        minStockLevel: '5',
+        cost: '', // User will need to enter cost manually
+      }));
+    } else {
+      // Handle individual params (backwards compatibility)
+      if (route.params?.productName) {
+        setFormData(prev => ({ ...prev, productName: route.params.productName }));
+      }
+      if (route.params?.description) {
+        setFormData(prev => ({ ...prev, description: route.params.description }));
+      }
+      if (scannedBarcode) {
+        setFormData(prev => ({ ...prev, barcode: scannedBarcode }));
+      }
     }
-    
-    if (scannedBarcode) {
-      setFormData(prev => ({ ...prev, barcode: scannedBarcode }));
-    }
-  }, [item, scannedBarcode]);
+  }, [item, scannedBarcode, apiData, route.params]);
 
   useEffect(() => {
     Animated.parallel([
@@ -83,6 +109,18 @@ const ItemDetailScreen = ({ navigation, route }) => {
       }),
     ]).start();
   }, []);
+
+  // Auto-populate practice field when only one practice exists
+  useEffect(() => {
+    if (!isEditing && practices && practices.length === 1 && !formData.practiceId) {
+      const singlePractice = practices[0];
+      setFormData(prev => ({ 
+        ...prev, 
+        practiceId: singlePractice.practiceId,
+        practiceName: singlePractice.name
+      }));
+    }
+  }, [practices, formData.practiceId, isEditing]);
 
 
   const validateForm = () => {
@@ -108,10 +146,14 @@ const ItemDetailScreen = ({ navigation, route }) => {
       newErrors.barcode = 'Barcode must contain only numbers';
     }
 
-    if (formData.cost && (isNaN(parseFloat(formData.cost)) || parseFloat(formData.cost) < 0)) {
+    // Make cost mandatory for new items
+    if (!formData.cost || !formData.cost.trim()) {
+      newErrors.cost = 'Cost per unit is required';
+    } else if (isNaN(parseFloat(formData.cost)) || parseFloat(formData.cost) < 0) {
       newErrors.cost = 'Cost must be a valid positive number';
     }
 
+    // Practice selection is always mandatory
     if (!formData.practiceId) {
       newErrors.practiceId = 'Please select a practice';
     }
@@ -184,6 +226,54 @@ const ItemDetailScreen = ({ navigation, route }) => {
     setDatePickerVisibility(false);
   };
 
+  const handleDelete = async () => {
+    if (!isEditing || !item) {
+      Alert.alert('Error', 'Cannot delete - item not found.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // SECURITY CHECK: Verify ownership before deleting
+      const hasPermission = await verifyOwnership('inventory', item.id);
+      if (!hasPermission) {
+        Alert.alert('Access Denied', 'You do not have permission to delete this item.');
+        setLoading(false);
+        return;
+      }
+
+      // Delete the item from Firestore
+      await deleteDoc(doc(db, 'inventory', item.id));
+      
+      setShowDeleteDialog(false);
+      Alert.alert(
+        'Item Deleted', 
+        `"${item.productName}" has been successfully deleted from your inventory.`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      Alert.alert('Error', 'Failed to delete item. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete Item',
+      `Are you sure you want to delete "${item?.productName || 'this item'}" from your inventory?\n\nThis action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: () => setShowDeleteDialog(true)
+        }
+      ]
+    );
+  };
+
   const handleConfirmDate = (date) => {
     setFormData(prev => ({ ...prev, expiryDate: date }));
     hideDatePicker();
@@ -197,6 +287,114 @@ const ItemDetailScreen = ({ navigation, route }) => {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const pickImage = async () => {
+    // Request permission to access media library
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'We need camera roll permissions to select an image.');
+      return;
+    }
+
+    Alert.alert(
+      'Select Image',
+      'Choose how you want to add an image',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Camera', onPress: () => takePhoto() },
+        { text: 'Photo Library', onPress: () => selectFromLibrary() }
+      ]
+    );
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'We need camera permissions to take a photo.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      await uploadImage(result.assets[0]);
+    }
+  };
+
+  const selectFromLibrary = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      await uploadImage(result.assets[0]);
+    }
+  };
+
+  const uploadImage = async (imageAsset) => {
+    setImageUploading(true);
+    try {
+      const response = await fetch(imageAsset.uri);
+      const blob = await response.blob();
+      
+      // Create a unique filename
+      const filename = `inventory/${user?.uid}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+      const storageRef = ref(storage, filename);
+      
+      // Upload the image
+      await uploadBytes(storageRef, blob);
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      // Update form data with the image URL
+      setFormData(prev => ({ ...prev, imageUri: downloadURL }));
+      
+      Alert.alert('Success', 'Image uploaded successfully!');
+    } catch (error) {
+      console.error('Image upload error:', error);
+      Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const removeImage = async () => {
+    if (formData.imageUri) {
+      Alert.alert(
+        'Remove Image',
+        'Are you sure you want to remove this image?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              // If it's a Firebase Storage URL, try to delete it
+              if (formData.imageUri.includes('firebase')) {
+                try {
+                  const storageRef = ref(storage, formData.imageUri);
+                  await deleteObject(storageRef);
+                } catch (error) {
+                  console.log('Could not delete old image:', error);
+                  // Continue anyway - the URL might be invalid
+                }
+              }
+              setFormData(prev => ({ ...prev, imageUri: null }));
+            }
+          }
+        ]
+      );
+    }
   };
 
   return (
@@ -238,6 +436,46 @@ const ItemDetailScreen = ({ navigation, route }) => {
             )}
           </View>
         </Surface>
+
+        {/* API Data Info Card */}
+        {apiData && apiData.success && !isEditing && (
+          <Card style={[styles.formCard, { backgroundColor: colors.primaryLight + '15', marginBottom: spacing.md }]}>
+            <Card.Content>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+                <Text style={{ fontSize: 20, marginRight: spacing.sm }}>🔍</Text>
+                <Title style={[styles.sectionTitle, { color: colors.primary, marginBottom: 0 }]}>
+                  Product Information Found
+                </Title>
+              </View>
+              <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.sm }}>
+                Product details have been automatically filled from our database. You can edit them below and add inventory-specific information.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+                {apiData.brand && (
+                  <Chip style={{ backgroundColor: colors.primary + '20' }}>
+                    <Text style={{ fontSize: 12, color: colors.primary }}>
+                      Brand: {apiData.brand}
+                    </Text>
+                  </Chip>
+                )}
+                {apiData.category && (
+                  <Chip style={{ backgroundColor: colors.primary + '20' }}>
+                    <Text style={{ fontSize: 12, color: colors.primary }}>
+                      Category: {apiData.category}
+                    </Text>
+                  </Chip>
+                )}
+                {apiData.size && (
+                  <Chip style={{ backgroundColor: colors.primary + '20' }}>
+                    <Text style={{ fontSize: 12, color: colors.primary }}>
+                      Size: {apiData.size}
+                    </Text>
+                  </Chip>
+                )}
+              </View>
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Form Section */}
         <Card style={styles.formCard}>
@@ -360,7 +598,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
 
             {/* Practice & Expiry */}
             <View style={styles.section}>
-              <Title style={styles.sectionTitle}>Practice & Expiry</Title>
+              <Title style={styles.sectionTitle}>Practice & Expiry *</Title>
               <Divider style={styles.sectionDivider} />
               
               <PracticePicker
@@ -382,7 +620,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
               )}
 
               <CustomTextInput
-                label="Cost per Unit (£)"
+                label="Cost per Unit (£) *"
                 value={formData.cost}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, cost: text }))}
                 mode="outlined"
@@ -424,11 +662,26 @@ const ItemDetailScreen = ({ navigation, route }) => {
               />
 
               {/* Image Picker */}
-              <TouchableOpacity onPress={() => Alert.alert('Image Picker', 'Image picker functionality will be added here')}>
+              <TouchableOpacity onPress={pickImage} disabled={imageUploading}>
                 <Surface style={styles.imagePickerSurface}>
                   <View style={styles.imagePickerContent}>
-                    {formData.imageUri ? (
-                      <Image source={{ uri: formData.imageUri }} style={styles.itemImage} />
+                    {imageUploading ? (
+                      <View style={styles.imagePlaceholder}>
+                        <Text style={styles.imagePlaceholderIcon}>⏳</Text>
+                        <Paragraph style={styles.imagePlaceholderText}>
+                          Uploading image...
+                        </Paragraph>
+                      </View>
+                    ) : formData.imageUri ? (
+                      <View style={styles.imageContainer}>
+                        <Image source={{ uri: formData.imageUri }} style={styles.itemImage} />
+                        <TouchableOpacity 
+                          style={styles.removeImageButton} 
+                          onPress={removeImage}
+                        >
+                          <Text style={styles.removeImageText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
                     ) : (
                       <View style={styles.imagePlaceholder}>
                         <Text style={styles.imagePlaceholderIcon}>📸</Text>
@@ -477,6 +730,15 @@ const ItemDetailScreen = ({ navigation, route }) => {
           </Card.Content>
         </Card>
 
+        {/* Required Fields Note */}
+        <Card style={[styles.formCard, { backgroundColor: colors.warningLight + '10' }]}>
+          <Card.Content style={{ paddingVertical: spacing.sm }}>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: 'center' }}>
+              * Required fields
+            </Text>
+          </Card.Content>
+        </Card>
+
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
@@ -503,8 +765,50 @@ const ItemDetailScreen = ({ navigation, route }) => {
           >
             Cancel
           </Button>
+
+          {/* Delete Button - Only show when editing */}
+          {isEditing && (
+            <TouchableOpacity
+              onPress={confirmDelete}
+              disabled={loading}
+              style={[styles.deleteButton, loading && styles.disabledButton]}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.deleteButtonIcon}>🗑️</Text>
+              <Text style={styles.deleteButtonText}>Delete Item</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
+
+      {/* Delete Confirmation Dialog */}
+      <Portal>
+        <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
+          <Dialog.Title>⚠️ Final Confirmation</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={{ marginBottom: 16 }}>
+              You are about to permanently delete "{item?.productName}" from your inventory.
+            </Paragraph>
+            <Paragraph style={{ fontWeight: 'bold', color: colors.danger || '#ef4444' }}>
+              This action cannot be undone!
+            </Paragraph>
+            <Paragraph style={{ marginTop: 16, fontSize: 14, color: colors.textSecondary }}>
+              Current stock: {item?.currentQuantity || 0} units
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button 
+              onPress={handleDelete}
+              disabled={loading}
+              buttonColor={colors.danger || '#ef4444'}
+              textColor={colors.white}
+            >
+              {loading ? 'Deleting...' : 'Delete Forever'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
     </PracticeEnforcement>
   );
@@ -693,11 +997,33 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
+  imageContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   itemImage: {
     width: 120,
     height: 120,
     borderRadius: borderRadius.md,
     resizeMode: 'cover',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.danger,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.small,
+  },
+  removeImageText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: typography.fontWeight.bold,
   },
   buttonContainer: {
     gap: spacing.md,
@@ -735,6 +1061,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.danger || '#ef4444',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.sm,
+    ...shadows.small,
+  },
+  deleteButtonIcon: {
+    fontSize: 18,
+    marginRight: spacing.sm,
+  },
+  deleteButtonText: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semiBold,
+    color: colors.white,
   },
   currencyIcon: {
     fontSize: typography.fontSize.lg,

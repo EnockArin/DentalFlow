@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, StatusBar, Platform } from 'react-native';
-import { Button, Card, Title, Paragraph } from 'react-native-paper';
+import { View, Text, StyleSheet, Alert, StatusBar, Platform, Modal, TouchableOpacity } from 'react-native';
+import { Button, Card, Title, Paragraph, Dialog, Portal } from 'react-native-paper';
+import CustomTextInput from '../components/common/CustomTextInput';
 import { colors, spacing, borderRadius } from '../constants/theme';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useSelector } from 'react-redux';
+import { lookupBarcode } from '../services/barcodeApiService';
 
 // Use expo-camera instead of expo-barcode-scanner
 let Camera, CameraView;
@@ -20,12 +22,28 @@ try {
   cameraError = error.message;
 }
 
-const BarcodeScannerScreen = ({ navigation }) => {
+const BarcodeScannerScreen = ({ navigation, route }) => {
   const { user } = useSelector((state) => state.auth);
+  const { items } = useSelector((state) => state.inventory);
+  
+  // Check if we're scanning for shopping list
+  const { forShoppingList, onAddToShoppingList } = route.params || {};
+  
   const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
   const [scannedData, setScannedData] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
+  
+  // Shopping list specific states
+  const [showCostDialog, setShowCostDialog] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemQuantity, setNewItemQuantity] = useState('1');
+  const [newItemCost, setNewItemCost] = useState('');
+  const [currentBarcode, setCurrentBarcode] = useState('');
+  
+  // API lookup states
+  const [apiLookupResult, setApiLookupResult] = useState(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
 
   useEffect(() => {
     requestCameraPermission();
@@ -68,36 +86,53 @@ const BarcodeScannerScreen = ({ navigation }) => {
     const { type, data } = scanningResult;
 
     try {
-      // Query Firestore for item with this barcode
-      const q = query(collection(db, 'inventory'), where('barcode', '==', data));
+      // Query Firestore for item with this barcode AND owned by current user
+      // CRITICAL: Must filter by practiceId to prevent cross-user contamination
+      const q = query(
+        collection(db, 'inventory'), 
+        where('barcode', '==', data),
+        where('practiceId', '==', user?.uid)
+      );
       const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
-        // Item exists - show success message
+        // Item exists in inventory - double check ownership
         const itemDoc = querySnapshot.docs[0];
         const itemData = { id: itemDoc.id, ...itemDoc.data() };
         
-        Alert.alert(
-          'Item Found!',
-          `Found: ${itemData.productName}\nBarcode: ${data}\nCurrent Stock: ${itemData.currentQuantity}`,
-          [
-            { text: 'Scan Again', onPress: resetScanner },
-            { text: 'View Item', onPress: () => navigation.navigate('ItemDetail', { item: itemData }) }
-          ]
-        );
+        // Additional security validation
+        if (itemData.practiceId !== user?.uid) {
+          console.error('Security: Document ownership mismatch detected');
+          throw new Error('Access denied: Document ownership verification failed');
+        }
+        
+        if (forShoppingList) {
+          // Add to shopping list with cost from inventory
+          handleAddToShoppingListFromInventory(itemData, data);
+        } else {
+          // Item exists in inventory - offer checkout or edit options
+          Alert.alert(
+            'Item Found in Inventory!',
+            `${itemData.productName}\nCurrent Stock: ${itemData.currentQuantity}\nCost: £${(itemData.cost || 0).toFixed(2)}\n\nWhat would you like to do?`,
+            [
+              { text: 'Scan Again', onPress: resetScanner },
+              { 
+                text: 'Check Out Item', 
+                onPress: () => navigation.navigate('Checkout', { 
+                  scannedItem: itemData,
+                  barcode: data 
+                })
+              },
+              { 
+                text: 'Edit Inventory', 
+                onPress: () => navigation.navigate('ItemDetail', { item: itemData }) 
+              }
+            ]
+          );
+        }
       } else {
-        // Item not found
-        Alert.alert(
-          'Item Not Found',
-          `No item found with barcode: ${data}\n\nWould you like to add a new item?`,
-          [
-            { text: 'Scan Again', onPress: resetScanner },
-            { 
-              text: 'Add Item', 
-              onPress: () => navigation.replace('ItemDetail', { barcode: data })
-            }
-          ]
-        );
+        // Item not found in local inventory - try API lookup
+        await handleApiLookup(data);
       }
     } catch (error) {
       console.error('Error querying barcode:', error);
@@ -109,6 +144,191 @@ const BarcodeScannerScreen = ({ navigation }) => {
   const resetScanner = () => {
     setScanned(false);
     setScannedData(null);
+    setApiLookupResult(null);
+    setIsLookingUp(false);
+  };
+
+  const handleApiLookup = async (barcode) => {
+    setIsLookingUp(true);
+    setCurrentBarcode(barcode);
+
+    try {
+      const result = await lookupBarcode(barcode);
+      setApiLookupResult(result);
+
+      if (result && result.success) {
+        // Product found via API
+        const productInfo = result;
+        
+        if (forShoppingList) {
+          // For shopping list, show the product info and ask to add with cost
+          Alert.alert(
+            'Product Found!',
+            `Found: ${productInfo.productName}\nBrand: ${productInfo.brand || 'Unknown'}\nBarcode: ${barcode}\n\nAdd this item to your shopping list?`,
+            [
+              { text: 'Scan Again', onPress: resetScanner },
+              { 
+                text: 'Add to List', 
+                onPress: () => handleAddApiProductToShoppingList(productInfo, barcode)
+              }
+            ]
+          );
+        } else {
+          // For inventory, show product info and offer to check in (add) to inventory
+          Alert.alert(
+            'New Product Found!',
+            `${productInfo.productName}\nBrand: ${productInfo.brand || 'Unknown'}\nBarcode: ${barcode}\n\nThis item is not in your inventory. Would you like to check it in?`,
+            [
+              { text: 'Scan Again', onPress: resetScanner },
+              { 
+                text: 'Check In Item', 
+                onPress: () => navigation.replace('ItemDetail', { 
+                  barcode: barcode,
+                  productName: productInfo.productName,
+                  description: productInfo.description,
+                  brand: productInfo.brand,
+                  category: productInfo.category,
+                  size: productInfo.size,
+                  imageUrl: productInfo.imageUrl,
+                  apiData: productInfo
+                })
+              }
+            ]
+          );
+        }
+      } else {
+        // API lookup failed or no product found
+        if (forShoppingList) {
+          // Show manual cost input dialog
+          setNewItemName('');
+          setNewItemQuantity('1');
+          setNewItemCost('');
+          setShowCostDialog(true);
+        } else {
+          // Normal inventory flow for unknown items
+          Alert.alert(
+            'Unknown Product',
+            `No product information found for barcode: ${barcode}\n\nThis item is not in your inventory. Would you like to check in a new item manually?`,
+            [
+              { text: 'Scan Again', onPress: resetScanner },
+              { 
+                text: 'Check In New Item', 
+                onPress: () => navigation.replace('ItemDetail', { barcode: barcode })
+              }
+            ]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('API Lookup error:', error);
+      Alert.alert(
+        'Lookup Failed',
+        'Failed to lookup product information. Would you like to check in this item manually?',
+        [
+          { text: 'Scan Again', onPress: resetScanner },
+          { text: 'Check In Manually', onPress: () => {
+            if (forShoppingList) {
+              setNewItemName('');
+              setNewItemQuantity('1');
+              setNewItemCost('');
+              setShowCostDialog(true);
+            } else {
+              navigation.replace('ItemDetail', { barcode: barcode });
+            }
+          }}
+        ]
+      );
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
+  const handleAddToShoppingListFromInventory = (itemData, barcode) => {
+    const newItem = {
+      id: `manual_${Date.now()}_${barcode}`,
+      productName: itemData.productName,
+      quantity: 1,
+      cost: itemData.cost || itemData.unitCost || 0,
+      notes: `Scanned from inventory: ${itemData.description || 'No description'}`,
+      type: 'manual',
+      dateAdded: new Date().toISOString(),
+      barcode: barcode,
+      originalItem: itemData
+    };
+
+    Alert.alert(
+      'Add to Shopping List',
+      `Found: ${itemData.productName}\nUnit Cost: £${((itemData.cost || itemData.unitCost) || 0).toFixed(2)}\n\nAdd this item to your shopping list?`,
+      [
+        { text: 'Scan Again', onPress: resetScanner },
+        { 
+          text: 'Add to List', 
+          onPress: () => {
+            if (onAddToShoppingList) {
+              onAddToShoppingList(newItem);
+            }
+            navigation.goBack();
+            Alert.alert('Success', `Added "${itemData.productName}" to your shopping list with cost £${((itemData.cost || itemData.unitCost) || 0).toFixed(2)}`);
+          }
+        }
+      ]
+    );
+  };
+
+  const handleAddApiProductToShoppingList = (productInfo, barcode) => {
+    // Show cost input dialog with pre-filled product name from API
+    setCurrentBarcode(barcode);
+    setNewItemName(productInfo.productName);
+    setNewItemQuantity('1');
+    setNewItemCost('');
+    setShowCostDialog(true);
+  };
+
+  const handleAddNewItemToShoppingList = () => {
+    if (!newItemName.trim()) {
+      Alert.alert('Invalid Input', 'Please enter an item name.');
+      return;
+    }
+
+    if (!newItemCost || !newItemCost.trim()) {
+      Alert.alert('Invalid Input', 'Please enter a unit cost.');
+      return;
+    }
+
+    const quantity = parseInt(newItemQuantity) || 1;
+    const cost = parseFloat(newItemCost);
+    
+    if (isNaN(cost) || cost < 0) {
+      Alert.alert('Invalid Input', 'Please enter a valid positive cost.');
+      return;
+    }
+    
+    const newItem = {
+      id: `manual_${Date.now()}_${currentBarcode}`,
+      productName: newItemName.trim(),
+      quantity: quantity,
+      cost: cost,
+      notes: apiLookupResult && apiLookupResult.success 
+        ? `From API: ${apiLookupResult.brand ? apiLookupResult.brand + ' - ' : ''}${apiLookupResult.description || ''}`
+        : `Scanned barcode: ${currentBarcode}`,
+      type: 'manual',
+      dateAdded: new Date().toISOString(),
+      barcode: currentBarcode,
+      apiData: apiLookupResult || null
+    };
+
+    if (onAddToShoppingList) {
+      onAddToShoppingList(newItem);
+    }
+    
+    setShowCostDialog(false);
+    navigation.goBack();
+    Alert.alert('Success', `Added "${newItem.productName}" to your shopping list with cost £${cost.toFixed(2)}`);
+  };
+
+  const handleCancelCostDialog = () => {
+    setShowCostDialog(false);
+    resetScanner();
   };
 
   if (cameraError) {
@@ -197,7 +417,8 @@ const BarcodeScannerScreen = ({ navigation }) => {
                 <Card.Content style={styles.headerContent}>
                   <Title style={styles.headerTitle}>Barcode Scanner</Title>
                   <Paragraph style={styles.headerSubtitle}>
-                    {scanned ? 'Barcode Scanned!' : 'Point camera at barcode'}
+                    {isLookingUp ? 'Looking up product...' :
+                     scanned ? 'Barcode Scanned!' : 'Point camera at barcode'}
                   </Paragraph>
                 </Card.Content>
               </Card>
@@ -270,6 +491,79 @@ const BarcodeScannerScreen = ({ navigation }) => {
           <Title>Camera component not available</Title>
         </View>
       )}
+      
+      {/* Cost Input Dialog for Shopping List */}
+      <Portal>
+        <Dialog visible={showCostDialog} onDismiss={handleCancelCostDialog}>
+          <Dialog.Title>Add Item to Shopping List</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={{ marginBottom: 16 }}>
+              {apiLookupResult && apiLookupResult.success 
+                ? 'Product found! Please set quantity and unit cost:'
+                : 'Item not found. Please provide product details and unit cost:'}
+            </Paragraph>
+            
+            {apiLookupResult && apiLookupResult.success && (
+              <View style={{ backgroundColor: colors.primaryLight + '10', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>
+                  Product Info:
+                </Text>
+                {apiLookupResult.brand && (
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                    Brand: {apiLookupResult.brand}
+                  </Text>
+                )}
+                {apiLookupResult.category && (
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                    Category: {apiLookupResult.category}
+                  </Text>
+                )}
+              </View>
+            )}
+            
+            <Paragraph style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 16 }}>
+              Barcode: {currentBarcode}
+            </Paragraph>
+            
+            <CustomTextInput
+              label="Product Name"
+              value={newItemName}
+              onChangeText={setNewItemName}
+              mode="outlined"
+              style={{ marginBottom: 12 }}
+            />
+            
+            <CustomTextInput
+              label="Quantity"
+              value={newItemQuantity}
+              onChangeText={setNewItemQuantity}
+              mode="outlined"
+              keyboardType="numeric"
+              style={{ marginBottom: 12 }}
+              placeholder="1"
+            />
+            
+            <CustomTextInput
+              label="Unit Cost (£) *"
+              value={newItemCost}
+              onChangeText={setNewItemCost}
+              mode="outlined"
+              keyboardType="decimal-pad"
+              style={{ marginBottom: 12 }}
+              placeholder="0.00"
+              left={<Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.primary }}>£</Text>}
+            />
+            
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 8, fontStyle: 'italic' }}>
+              * Unit cost is required to add item to shopping list
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleCancelCostDialog}>Cancel</Button>
+            <Button onPress={handleAddNewItemToShoppingList}>Add to List</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };

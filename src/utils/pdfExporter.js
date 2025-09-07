@@ -135,134 +135,67 @@ export const generateShoppingListPDF = async (combinedShoppingList, manualItems,
 
     <div class="summary">
         <div class="summary-stats">
-            <span class="summary-number">${combinedShoppingList.length}</span>
+            <span class="summary-number">${[...criticalItems, ...urgentItems, ...normalLowStock, ...manualItems].length}</span>
             <div class="summary-label">Total Items</div>
-        </div>
-        <div class="summary-stats">
-            <span class="summary-number critical">${criticalItems.length}</span>
-            <div class="summary-label">Out of Stock</div>
-        </div>
-        <div class="summary-stats">
-            <span class="summary-number urgent">${urgentItems.length}</span>
-            <div class="summary-label">Urgent</div>
-        </div>
-        <div class="summary-stats">
-            <span class="summary-number manual">${manualItems.length}</span>
-            <div class="summary-label">Manual Items</div>
         </div>
     </div>
   `;
 
-  // Critical Items Section
-  if (criticalItems.length > 0) {
-    html += `
-    <div class="section">
-        <div class="section-title critical">🔴 CRITICAL - OUT OF STOCK (${criticalItems.length})</div>
-    `;
-    
-    criticalItems.forEach(item => {
-      const needed = Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
-      const estimatedCost = needed * (item.unitCost || 0);
-      html += `
-        <div class="item">
-            <div class="item-name">${item.productName}</div>
-            <div class="item-details">
-                <div><strong>Current:</strong> ${item.currentQuantity}</div>
-                <div><strong>Minimum:</strong> ${item.minStockLevel}</div>
-                <div><strong>Suggested Order:</strong> ${needed} units</div>
-                ${item.unitCost ? `<div><strong>Unit Cost:</strong> £${item.unitCost.toFixed(2)}</div>` : ''}
-                ${item.unitCost ? `<div><strong>Estimated Cost:</strong> £${estimatedCost.toFixed(2)}</div>` : ''}
-                ${item.location ? `<div><strong>Location:</strong> ${item.location}</div>` : ''}
-                ${item.barcode ? `<div><strong>Barcode:</strong> ${item.barcode}</div>` : ''}
-                ${item.description ? `<div><strong>Description:</strong> ${item.description}</div>` : ''}
-            </div>
-        </div>
-      `;
+  // All Items Section - Combined without categorization
+  const allItems = [];
+  
+  // Add all inventory items
+  [...criticalItems, ...urgentItems, ...normalLowStock].forEach(item => {
+    const needed = Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
+    const unitCost = item.cost || item.unitCost || 0;
+    const estimatedCost = needed * unitCost;
+    allItems.push({
+      type: 'inventory',
+      name: item.productName,
+      details: [
+        `<strong>Current:</strong> ${item.currentQuantity}`,
+        `<strong>Minimum:</strong> ${item.minStockLevel}`,
+        `<strong>Suggested Order:</strong> ${needed} units`,
+        ...(unitCost ? [`<strong>Unit Cost:</strong> £${unitCost.toFixed(2)}`] : []),
+        ...(unitCost ? [`<strong>Estimated Cost:</strong> £${estimatedCost.toFixed(2)}`] : []),
+        ...(item.location ? [`<strong>Location:</strong> ${item.location}`] : []),
+        ...(item.barcode ? [`<strong>Barcode:</strong> ${item.barcode}`] : []),
+        ...(item.description ? [`<strong>Description:</strong> ${item.description}`] : [])
+      ]
     });
-    
-    html += `</div>`;
-  }
-
-  // Urgent Items Section
-  if (urgentItems.length > 0) {
-    html += `
-    <div class="section">
-        <div class="section-title urgent">🟡 URGENT - LOW STOCK (${urgentItems.length})</div>
-    `;
-    
-    urgentItems.forEach(item => {
-      const needed = Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
-      const estimatedCost = needed * (item.unitCost || 0);
-      html += `
-        <div class="item">
-            <div class="item-name">${item.productName}</div>
-            <div class="item-details">
-                <div><strong>Current:</strong> ${item.currentQuantity}</div>
-                <div><strong>Minimum:</strong> ${item.minStockLevel}</div>
-                <div><strong>Suggested Order:</strong> ${needed} units</div>
-                ${item.unitCost ? `<div><strong>Unit Cost:</strong> £${item.unitCost.toFixed(2)}</div>` : ''}
-                ${item.unitCost ? `<div><strong>Estimated Cost:</strong> £${estimatedCost.toFixed(2)}</div>` : ''}
-                ${item.location ? `<div><strong>Location:</strong> ${item.location}</div>` : ''}
-                ${item.barcode ? `<div><strong>Barcode:</strong> ${item.barcode}</div>` : ''}
-                ${item.description ? `<div><strong>Description:</strong> ${item.description}</div>` : ''}
-            </div>
-        </div>
-      `;
+  });
+  
+  // Add manual items
+  manualItems.forEach(item => {
+    const unitCost = item.cost || item.unitCost || 0;
+    const estimatedCost = (item.quantity || 1) * unitCost;
+    allItems.push({
+      type: 'manual',
+      name: item.productName,
+      details: [
+        `<strong>Quantity:</strong> ${item.quantity || 1}`,
+        ...(unitCost ? [`<strong>Unit Cost:</strong> £${unitCost.toFixed(2)}`] : []),
+        ...(unitCost ? [`<strong>Estimated Cost:</strong> £${estimatedCost.toFixed(2)}`] : []),
+        ...(item.notes ? [`<strong>Notes:</strong> ${item.notes}`] : []),
+        ...(item.location ? [`<strong>Location:</strong> ${item.location}`] : []),
+        ...(item.description ? [`<strong>Description:</strong> ${item.description}`] : []),
+        `<strong>Added:</strong> ${new Date(item.dateAdded).toLocaleDateString()}`
+      ]
     });
-    
-    html += `</div>`;
-  }
+  });
 
-  // Normal Low Stock Items Section
-  if (normalLowStock.length > 0) {
+  if (allItems.length > 0) {
     html += `
     <div class="section">
-        <div class="section-title low-stock">🟠 LOW STOCK (${normalLowStock.length})</div>
+        <div class="section-title">📋 SHOPPING LIST (${allItems.length} items)</div>
     `;
     
-    normalLowStock.forEach(item => {
-      const needed = Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
-      const estimatedCost = needed * (item.unitCost || 0);
+    allItems.forEach((item, index) => {
       html += `
         <div class="item">
-            <div class="item-name">${item.productName}</div>
+            <div class="item-name">${index + 1}. ${item.name}</div>
             <div class="item-details">
-                <div><strong>Current:</strong> ${item.currentQuantity}</div>
-                <div><strong>Minimum:</strong> ${item.minStockLevel}</div>
-                <div><strong>Suggested Order:</strong> ${needed} units</div>
-                ${item.unitCost ? `<div><strong>Unit Cost:</strong> £${item.unitCost.toFixed(2)}</div>` : ''}
-                ${item.unitCost ? `<div><strong>Estimated Cost:</strong> £${estimatedCost.toFixed(2)}</div>` : ''}
-                ${item.location ? `<div><strong>Location:</strong> ${item.location}</div>` : ''}
-                ${item.barcode ? `<div><strong>Barcode:</strong> ${item.barcode}</div>` : ''}
-                ${item.description ? `<div><strong>Description:</strong> ${item.description}</div>` : ''}
-            </div>
-        </div>
-      `;
-    });
-    
-    html += `</div>`;
-  }
-
-  // Manual Items Section
-  if (manualItems.length > 0) {
-    html += `
-    <div class="section">
-        <div class="section-title manual">📝 MANUALLY ADDED ITEMS (${manualItems.length})</div>
-    `;
-    
-    manualItems.forEach(item => {
-      const estimatedCost = (item.quantity || 1) * (item.unitCost || 0);
-      html += `
-        <div class="item">
-            <div class="item-name">${item.productName}</div>
-            <div class="item-details">
-                <div><strong>Quantity:</strong> ${item.quantity || 1}</div>
-                ${item.unitCost ? `<div><strong>Unit Cost:</strong> £${item.unitCost.toFixed(2)}</div>` : ''}
-                ${item.unitCost ? `<div><strong>Estimated Cost:</strong> £${estimatedCost.toFixed(2)}</div>` : ''}
-                ${item.notes ? `<div><strong>Notes:</strong> ${item.notes}</div>` : ''}
-                ${item.location ? `<div><strong>Location:</strong> ${item.location}</div>` : ''}
-                ${item.description ? `<div><strong>Description:</strong> ${item.description}</div>` : ''}
-                <div><strong>Added:</strong> ${new Date(item.dateAdded).toLocaleDateString()}</div>
+                ${item.details.map(detail => `<div>${detail}</div>`).join('')}
             </div>
         </div>
       `;
@@ -275,10 +208,10 @@ export const generateShoppingListPDF = async (combinedShoppingList, manualItems,
   let totalEstimatedCost = 0;
   [...criticalItems, ...urgentItems, ...normalLowStock].forEach(item => {
     const needed = Math.max(item.minStockLevel * 2 - item.currentQuantity, item.minStockLevel);
-    totalEstimatedCost += needed * (item.unitCost || 0);
+    totalEstimatedCost += needed * (item.cost || item.unitCost || 0);
   });
   manualItems.forEach(item => {
-    totalEstimatedCost += (item.quantity || 1) * (item.unitCost || 0);
+    totalEstimatedCost += (item.quantity || 1) * (item.cost || item.unitCost || 0);
   });
 
   if (totalEstimatedCost > 0) {

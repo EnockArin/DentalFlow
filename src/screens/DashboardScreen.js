@@ -7,7 +7,6 @@ import { signOut } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { logout } from '../store/slices/authSlice';
-import { signOutFromGoogle } from '../services/googleAuth';
 import { ensureOwnership } from '../utils/security';
 import { colors, spacing, borderRadius, typography, shadows, components } from '../constants/theme';
 import { globalFormStyles } from '../styles/globalFormFixes';
@@ -20,7 +19,6 @@ const DashboardScreen = ({ navigation }) => {
   
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
-  const [showMenu, setShowMenu] = useState(false);
   const [selectedPracticeId, setSelectedPracticeId] = useState('all');
   const [showPracticeMenu, setShowPracticeMenu] = useState(false);
   const [showCheckInOutModal, setShowCheckInOutModal] = useState(false);
@@ -47,10 +45,15 @@ const DashboardScreen = ({ navigation }) => {
     ]).start();
   }, []);
 
+  // Auto-select single practice when there's only one practice
+  useEffect(() => {
+    if (practices && practices.length === 1 && selectedPracticeId === 'all') {
+      setSelectedPracticeId(practices[0].id);
+    }
+  }, [practices, selectedPracticeId]);
+
   const handleLogout = async () => {
     try {
-      // Sign out from Google if user was signed in with Google
-      await signOutFromGoogle();
       // Sign out from Firebase
       await signOut(auth);
       dispatch(logout());
@@ -149,48 +152,17 @@ const DashboardScreen = ({ navigation }) => {
     {
       title: 'Scan Barcode',
       action: () => navigation.navigate('Scanner'),
-      mode: 'contained',
-      color: colors.info,
+      mode: 'outlined',
+      color: colors.primary,
     },
     {
       title: 'Manual Check In/Out',
       action: () => setShowCheckInOutModal(true),
-      mode: 'contained',
-      color: colors.secondary,
+      mode: 'outlined',
+      color: colors.primary,
     },
   ];
 
-  const menuItems = [
-    {
-      title: 'Settings',
-      action: () => {
-        setShowMenu(false);
-        navigation.navigate('Settings');
-      },
-    },
-    {
-      title: 'Treatment Kits',
-      action: () => {
-        setShowMenu(false);
-        navigation.navigate('TreatmentKits');
-      },
-    },
-    {
-      title: 'Practices',
-      action: () => {
-        setShowMenu(false);
-        navigation.navigate('Practices');
-      },
-    },
-    {
-      title: `Shopping List ${filteredLowStockItems.length > 0 ? `(${filteredLowStockItems.length})` : ''}`,
-      action: () => {
-        setShowMenu(false);
-        navigation.navigate('ShoppingList');
-      },
-      badge: filteredLowStockItems.length > 0,
-    },
-  ];
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -199,12 +171,13 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.userInfo}>
-              <Title style={styles.welcomeTitle}>Welcome back!</Title>
-              <Paragraph style={styles.userEmail}>{user?.email}</Paragraph>
+              <Title style={styles.welcomeTitle}>
+                Welcome back{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''}!
+              </Title>
             </View>
           </View>
-          <TouchableOpacity onPress={() => setShowMenu(true)} style={styles.settingsButton}>
-            <Text style={styles.headerIcon}>☰</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.settingsButton}>
+            <Text style={styles.headerIcon}>⚙️</Text>
           </TouchableOpacity>
         </View>
 
@@ -277,21 +250,82 @@ const DashboardScreen = ({ navigation }) => {
             
             <View style={styles.actionGrid}>
               {quickActions.map((action, index) => (
+                <View key={index} style={styles.buttonWithInfo}>
+                  <Button
+                    mode={action.mode}
+                    onPress={action.action}
+                    style={[
+                      styles.actionButton,
+                      action.mode === 'contained' && { backgroundColor: action.color }
+                    ]}
+                    buttonColor={action.mode === 'contained' ? action.color : undefined}
+                    textColor={action.mode === 'contained' ? colors.white : action.color}
+                    contentStyle={styles.actionButtonContent}
+                  >
+                    {action.title}
+                  </Button>
+                  <TouchableOpacity
+                    style={styles.infoIcon}
+                    onPress={() => {
+                      if (action.title === 'Scan Barcode') {
+                        Alert.alert('Scan Barcode', 'Use your camera to scan product barcodes for quick inventory check-in/out and shopping list additions');
+                      } else if (action.title === 'Manual Check In/Out') {
+                        Alert.alert('Manual Check In/Out', 'Manually add items to inventory (check-in) or remove items from stock (check-out) without scanning');
+                      }
+                    }}
+                  >
+                    <Text style={styles.infoIconText}>ⓘ</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </Card.Content>
+        </Card>
+
+        {/* Management Tools */}
+        <Card style={styles.actionCard}>
+          <Card.Content style={styles.actionContent}>
+            <View style={styles.actionHeader}>
+              <Title style={styles.actionTitle}>Management Tools</Title>
+            </View>
+            
+            <View style={styles.actionGrid}>
+              <View style={styles.buttonWithInfo}>
                 <Button
-                  key={index}
-                  mode={action.mode}
-                  onPress={action.action}
-                  style={[
-                    styles.actionButton,
-                    action.mode === 'contained' && { backgroundColor: action.color }
-                  ]}
-                  buttonColor={action.mode === 'contained' ? action.color : undefined}
-                  textColor={action.mode === 'contained' ? colors.white : action.color}
+                  mode="outlined"
+                  onPress={() => navigation.navigate('TreatmentKits')}
+                  style={styles.actionButton}
                   contentStyle={styles.actionButtonContent}
                 >
-                  {action.title}
+                  Treatment Kits
                 </Button>
-              ))}
+                <TouchableOpacity
+                  style={styles.infoIcon}
+                  onPress={() => Alert.alert('Treatment Kits', 'Create and manage standardized kits of dental supplies for common procedures')}
+                >
+                  <Text style={styles.infoIconText}>ⓘ</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.buttonWithInfo}>
+                <Button
+                  mode="outlined"
+                  onPress={() => navigation.navigate('ShoppingList')}
+                  style={[
+                    styles.actionButton,
+                    filteredLowStockItems.length > 0 && styles.badgeButton
+                  ]}
+                  contentStyle={styles.actionButtonContent}
+                >
+                  {`Shopping List ${filteredLowStockItems.length > 0 ? `(${filteredLowStockItems.length})` : ''}`}
+                </Button>
+                <TouchableOpacity
+                  style={styles.infoIcon}
+                  onPress={() => Alert.alert('Shopping List', 'View and manage items that need to be reordered based on low stock levels')}
+                >
+                  <Text style={styles.infoIconText}>ⓘ</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </Card.Content>
         </Card>
@@ -380,41 +414,6 @@ const DashboardScreen = ({ navigation }) => {
         </Button>
       </Animated.View>
 
-      {/* Dropdown Menu Modal */}
-      <Modal
-        visible={showMenu}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowMenu(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMenu(false)}
-        >
-          <View style={styles.menuContainer}>
-            <View style={styles.menuContent}>
-              {menuItems.map((item, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.menuItem,
-                    index === menuItems.length - 1 && styles.lastMenuItem
-                  ]}
-                  onPress={item.action}
-                >
-                  <Text style={styles.menuText}>{item.title}</Text>
-                  {item.badge && (
-                    <View style={styles.menuBadge}>
-                      <Text style={styles.menuBadgeText}>!</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Practice Filter Modal */}
       <Modal
@@ -424,7 +423,7 @@ const DashboardScreen = ({ navigation }) => {
         onRequestClose={() => setShowPracticeMenu(false)}
       >
         <TouchableOpacity
-          style={styles.modalOverlay}
+          style={styles.practiceModalOverlay}
           activeOpacity={1}
           onPress={() => setShowPracticeMenu(false)}
         >
@@ -498,7 +497,7 @@ const DashboardScreen = ({ navigation }) => {
         onRequestClose={() => setShowCheckInOutModal(false)}
       >
         <TouchableOpacity
-          style={styles.modalOverlay}
+          style={styles.checkInOutModalOverlay}
           activeOpacity={1}
           onPress={() => setShowCheckInOutModal(false)}
         >
@@ -669,6 +668,12 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     backgroundColor: colors.lightGray,
+    padding: spacing.sm,
+    borderRadius: borderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 40,
+    minHeight: 40,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -753,6 +758,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  badgeButton: {
+    borderColor: colors.warning,
+    borderWidth: 2,
+  },
+  buttonWithInfo: {
+    position: 'relative',
+    marginBottom: spacing.sm,
+  },
+  infoIcon: {
+    position: 'absolute',
+    top: 4,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  infoIconText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: typography.fontWeight.bold,
+  },
   alertCard: {
     marginBottom: spacing.xl,
     borderRadius: borderRadius.lg,
@@ -806,6 +836,7 @@ const styles = StyleSheet.create({
   headerIcon: {
     fontSize: 26,
     textAlign: 'center',
+    color: colors.text,
   },
   // Practice Alerts Styles
   practiceAlertsCard: {
@@ -890,8 +921,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     color: colors.white,
   },
-  // Menu Modal Styles
-  modalOverlay: {
+  // Modal Overlay Styles
+  practiceModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-start',
@@ -899,44 +930,12 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     paddingRight: spacing.md,
   },
-  menuContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    ...shadows.large,
-    minWidth: 200,
-  },
-  menuContent: {
-    paddingVertical: spacing.sm,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  lastMenuItem: {
-    borderBottomWidth: 0,
-  },
-  menuText: {
-    fontSize: typography.fontSize.md,
-    color: colors.textPrimary,
-    fontWeight: typography.fontWeight.medium,
+  checkInOutModalOverlay: {
     flex: 1,
-  },
-  menuBadge: {
-    backgroundColor: colors.danger,
-    borderRadius: 10,
-    width: 20,
-    height: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  menuBadgeText: {
-    fontSize: 12,
-    color: colors.white,
-    fontWeight: typography.fontWeight.bold,
+    padding: spacing.md,
   },
   // Practice Filter Styles
   practiceFilterContainer: {

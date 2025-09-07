@@ -65,8 +65,8 @@ const CustomTextInput = (props) => {
       // iOS-specific COMPLETE form prevention
       keyboardAppearance: 'default',
       enablesReturnKeyAutomatically: false,
-      clearTextOnFocus: false,
-      selectTextOnFocus: false,
+      clearTextOnFocus: props.clearTextOnFocus !== undefined ? props.clearTextOnFocus : false,
+      selectTextOnFocus: props.selectTextOnFocus !== undefined ? props.selectTextOnFocus : false,
       smartInsertDelete: false,
       smartQuotesType: 'no',
       smartDashesType: 'no',
