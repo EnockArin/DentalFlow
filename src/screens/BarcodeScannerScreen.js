@@ -6,7 +6,7 @@ import { colors, spacing, borderRadius } from '../constants/theme';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useSelector } from 'react-redux';
-import { lookupBarcode } from '../services/barcodeApiService';
+import { lookupBarcode } from '../services/secureBarcodeService';
 
 // Use expo-camera instead of expo-barcode-scanner
 let Camera, CameraView;
@@ -221,23 +221,29 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
       }
     } catch (error) {
       console.error('API Lookup error:', error);
-      Alert.alert(
-        'Lookup Failed',
-        'Failed to lookup product information. Would you like to check in this item manually?',
-        [
-          { text: 'Scan Again', onPress: resetScanner },
-          { text: 'Check In Manually', onPress: () => {
-            if (forShoppingList) {
-              setNewItemName('');
-              setNewItemQuantity('1');
-              setNewItemCost('');
-              setShowCostDialog(true);
-            } else {
-              navigation.replace('ItemDetail', { barcode: barcode });
+      // Instead of showing an error, treat this as "product not found" and handle gracefully
+      console.log('Treating API error as "product not found" - handling gracefully');
+      
+      if (forShoppingList) {
+        // Show manual cost input dialog
+        setNewItemName('');
+        setNewItemQuantity('1'); 
+        setNewItemCost('');
+        setShowCostDialog(true);
+      } else {
+        // Normal inventory flow for unknown items
+        Alert.alert(
+          'Unknown Product',
+          `No product information found for barcode: ${barcode}\n\nThis item is not in your inventory. Would you like to check in a new item manually?`,
+          [
+            { text: 'Scan Again', onPress: resetScanner },
+            { 
+              text: 'Check In New Item', 
+              onPress: () => navigation.replace('ItemDetail', { barcode: barcode })
             }
-          }}
-        ]
-      );
+          ]
+        );
+      }
     } finally {
       setIsLookingUp(false);
     }

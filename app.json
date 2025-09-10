@@ -15,7 +15,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.DentalFlow",
       "infoPlist": {
-        "NSCameraUsageDescription": "DentalFlow needs camera access to scan barcodes for inventory management.",
+        "NSCameraUsageDescription": "DentalFlow needs camera access to scan barcodes and take photos of inventory items for better organisation.",
+        "NSPhotoLibraryUsageDescription": "DentalFlow needs access to your photo library to attach item images for better inventory management.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },

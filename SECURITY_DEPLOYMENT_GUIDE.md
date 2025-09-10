@@ -2,7 +2,7 @@
 
 ## IMMEDIATE ACTION REQUIRED
 
-Your DentalFlow application has been secured with critical vulnerability fixes. **You must deploy the Firestore security rules immediately** to prevent data breaches.
+Your DentalFlow application has been secured with critical vulnerability fixes and **API key protection**. **You must deploy both Firestore security rules and Firebase Functions immediately**.
 
 ## 🔥 STEP 1: Deploy Firestore Security Rules (CRITICAL - DO THIS NOW)
 
@@ -34,6 +34,31 @@ firebase deploy --only firestore:rules
 firebase firestore:rules list
 ```
 
+## 🔑 STEP 2: Deploy API Key Protection (CRITICAL)
+
+Your barcode API key has been moved to secure Firebase Functions to prevent exposure.
+
+### Set secure API key configuration:
+```bash
+firebase functions:config:set barcode.api_key="6onmtuh4xcj4sckza9021km9tbfbns"
+```
+
+### Install function dependencies:
+```bash
+cd functions
+npm install
+```
+
+### Deploy Firebase Functions:
+```bash
+firebase deploy --only functions
+```
+
+### Verify function deployment:
+```bash
+firebase functions:list
+```
+
 ## ✅ SECURITY FIXES IMPLEMENTED
 
 ### 1. **FIXED: Global Inventory Query IDOR**
@@ -62,6 +87,13 @@ firebase firestore:rules list
   - `ensureOwnership()` - Adds ownership fields to new data
   - `createSecuredQuery()` - Auto-filters queries by ownership
   - Rate limiting and audit logging
+
+### 5. **SECURED: Barcode API Key**
+- **Files Created:**
+  - `functions/index.js` - Secure Firebase Function proxy
+  - `src/services/secureBarcodeService.js` - Client-side secure service
+- **Fix:** API key moved from client to secure server-side function
+- **Impact:** API key is never exposed to users or in app bundles
 
 ## 🔐 SECURITY RULES OVERVIEW
 

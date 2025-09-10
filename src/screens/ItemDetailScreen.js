@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, Text, Animated } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { 
@@ -53,6 +53,14 @@ const ItemDetailScreen = ({ navigation, route }) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
+  
+  // Refs for form fields to enable scrolling to them
+  const scrollViewRef = useRef(null);
+  const productNameRef = useRef(null);
+  const quantityRef = useRef(null);
+  const minStockRef = useRef(null);
+  const costRef = useRef(null);
+  const practiceRef = useRef(null);
 
   // Initialize form data when editing or with API data
   useEffect(() => {
@@ -123,21 +131,25 @@ const ItemDetailScreen = ({ navigation, route }) => {
   }, [practices, formData.practiceId, isEditing]);
 
 
-  const validateForm = () => {
+  const validateForm = (showAlert = false) => {
     const newErrors = {};
+    const missingFields = [];
 
     if (!formData.productName.trim()) {
       newErrors.productName = 'Product name is required';
+      missingFields.push('Product name');
     }
 
     if (!formData.currentQuantity.trim()) {
-      newErrors.currentQuantity = 'Current quantity is required';
+      newErrors.currentQuantity = isEditing ? 'Stock to add is required' : 'Initial stock quantity is required';
+      missingFields.push(isEditing ? 'Stock to add' : 'Initial stock quantity');
     } else if (isNaN(parseInt(formData.currentQuantity)) || parseInt(formData.currentQuantity) < 0) {
       newErrors.currentQuantity = 'Must be a valid positive number';
     }
 
     if (!formData.minStockLevel.trim()) {
       newErrors.minStockLevel = 'Minimum stock level is required';
+      missingFields.push('Minimum stock level');
     } else if (isNaN(parseInt(formData.minStockLevel)) || parseInt(formData.minStockLevel) < 0) {
       newErrors.minStockLevel = 'Must be a valid positive number';
     }
@@ -149,6 +161,7 @@ const ItemDetailScreen = ({ navigation, route }) => {
     // Make cost mandatory for new items
     if (!formData.cost || !formData.cost.trim()) {
       newErrors.cost = 'Cost per unit is required';
+      missingFields.push('Cost per unit');
     } else if (isNaN(parseFloat(formData.cost)) || parseFloat(formData.cost) < 0) {
       newErrors.cost = 'Cost must be a valid positive number';
     }
@@ -156,14 +169,64 @@ const ItemDetailScreen = ({ navigation, route }) => {
     // Practice selection is always mandatory
     if (!formData.practiceId) {
       newErrors.practiceId = 'Please select a practice';
+      missingFields.push('Practice selection');
     }
 
     setErrors(newErrors);
+    
+    // If validation failed and showAlert is true, show helpful message and scroll to first error
+    if (Object.keys(newErrors).length > 0 && showAlert) {
+      const errorMessage = missingFields.length > 0 
+        ? `Please complete these required fields:\n\n• ${missingFields.join('\n• ')}`
+        : 'Please correct the highlighted fields before continuing.';
+      
+      Alert.alert(
+        '⚠️ Required Fields Missing',
+        errorMessage,
+        [{ text: 'OK', onPress: scrollToFirstError }]
+      );
+    }
+    
     return Object.keys(newErrors).length === 0;
   };
 
+  const scrollToFirstError = () => {
+    // Determine which field has the first error and scroll to it
+    if (errors.productName && productNameRef.current) {
+      productNameRef.current.measureInWindow((x, y) => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
+      });
+    } else if (errors.currentQuantity && quantityRef.current) {
+      quantityRef.current.measureInWindow((x, y) => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
+      });
+    } else if (errors.minStockLevel && minStockRef.current) {
+      minStockRef.current.measureInWindow((x, y) => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
+      });
+    } else if (errors.cost && costRef.current) {
+      costRef.current.measureInWindow((x, y) => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
+      });
+    } else if (errors.practiceId && practiceRef.current) {
+      practiceRef.current.measureInWindow((x, y) => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
+      });
+    }
+  };
+
+  const clearFieldError = (fieldName) => {
+    if (errors[fieldName]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldName];
+        return newErrors;
+      });
+    }
+  };
+
   const handleSave = async () => {
-    if (!validateForm()) {
+    if (!validateForm(true)) {
       return;
     }
 
@@ -290,13 +353,6 @@ const ItemDetailScreen = ({ navigation, route }) => {
   };
 
   const pickImage = async () => {
-    // Request permission to access media library
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'We need camera roll permissions to select an image.');
-      return;
-    }
-
     Alert.alert(
       'Select Image',
       'Choose how you want to add an image',
@@ -309,34 +365,66 @@ const ItemDetailScreen = ({ navigation, route }) => {
   };
 
   const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'We need camera permissions to take a photo.');
-      return;
-    }
+    try {
+      // Check permission first
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Camera Permission Required', 
+          'Please allow camera access in Settings to take photos of inventory items.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => ImagePicker.requestCameraPermissionsAsync() }
+          ]
+        );
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      await uploadImage(result.assets[0]);
+      if (!result.canceled && result.assets[0]) {
+        await uploadImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Unable to access camera. Please try again.');
     }
   };
 
   const selectFromLibrary = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+    try {
+      // Check permission first
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Photo Library Permission Required', 
+          'Please allow photo library access in Settings to select images for inventory items.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => ImagePicker.requestMediaLibraryPermissionsAsync() }
+          ]
+        );
+        return;
+      }
 
-    if (!result.canceled && result.assets[0]) {
-      await uploadImage(result.assets[0]);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error selecting from library:', error);
+      Alert.alert('Error', 'Unable to access photo library. Please try again.');
     }
   };
 
@@ -399,7 +487,11 @@ const ItemDetailScreen = ({ navigation, route }) => {
 
   return (
     <PracticeEnforcement>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.container} 
+        showsVerticalScrollIndicator={false}
+      >
       <Animated.View style={[
         styles.animatedContainer,
         {
@@ -485,22 +577,27 @@ const ItemDetailScreen = ({ navigation, route }) => {
               <Title style={styles.sectionTitle}>Product Information</Title>
               <Divider style={styles.sectionDivider} />
               
-              <CustomTextInput
-                label="Product Name"
-                value={formData.productName}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, productName: text }))}
-                mode="outlined"
-                style={[styles.input, globalFormStyles.hideValidationIndicators]}
-                error={!!errors.productName}
-                left={<TextInput.Icon icon="package-variant" />}
-                outlineColor={colors.borderLight}
-                activeOutlineColor={colors.primary}
-                autoComplete="off"
-                textContentType="none"
-                autoCorrect={false}
-                spellCheck={false}
-                right={null}
-              />
+              <View ref={productNameRef}>
+                <CustomTextInput
+                  label="Product Name"
+                  value={formData.productName}
+                  onChangeText={(text) => {
+                    setFormData(prev => ({ ...prev, productName: text }));
+                    clearFieldError('productName');
+                  }}
+                  mode="outlined"
+                  style={[styles.input, globalFormStyles.hideValidationIndicators]}
+                  error={!!errors.productName}
+                  left={<TextInput.Icon icon="package-variant" />}
+                  outlineColor={colors.borderLight}
+                  activeOutlineColor={colors.primary}
+                  autoComplete="off"
+                  textContentType="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  right={null}
+                />
+              </View>
               {errors.productName && (
                 <Text style={styles.errorText}>
                   {errors.productName}
@@ -542,11 +639,14 @@ const ItemDetailScreen = ({ navigation, route }) => {
               <Divider style={styles.sectionDivider} />
               
               <View style={styles.row}>
-                <View style={styles.halfInput}>
+                <View style={styles.halfInput} ref={quantityRef}>
                   <CustomTextInput
                     label={isEditing ? "Stock to Add" : "Initial Stock Quantity"}
                     value={formData.currentQuantity}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, currentQuantity: text }))}
+                    onChangeText={(text) => {
+                      setFormData(prev => ({ ...prev, currentQuantity: text }));
+                      clearFieldError('currentQuantity');
+                    }}
                     mode="outlined"
                     keyboardType="numeric"
                     error={!!errors.currentQuantity}
@@ -570,11 +670,14 @@ const ItemDetailScreen = ({ navigation, route }) => {
                   )}
                 </View>
 
-                <View style={styles.halfInput}>
+                <View style={styles.halfInput} ref={minStockRef}>
                   <CustomTextInput
                     label="Min Stock Level"
                     value={formData.minStockLevel}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, minStockLevel: text }))}
+                    onChangeText={(text) => {
+                      setFormData(prev => ({ ...prev, minStockLevel: text }));
+                      clearFieldError('minStockLevel');
+                    }}
                     mode="outlined"
                     keyboardType="numeric"
                     error={!!errors.minStockLevel}
@@ -601,42 +704,50 @@ const ItemDetailScreen = ({ navigation, route }) => {
               <Title style={styles.sectionTitle}>Practice & Expiry *</Title>
               <Divider style={styles.sectionDivider} />
               
-              <PracticePicker
-                value={formData.practiceId}
-                onSelect={(practiceId, practiceName) => 
-                  setFormData(prev => ({ 
-                    ...prev, 
-                    practiceId, 
-                    practiceName 
-                  }))
-                }
-                placeholder="Select practice *"
-                style={styles.input}
-              />
+              <View ref={practiceRef}>
+                <PracticePicker
+                  value={formData.practiceId}
+                  onSelect={(practiceId, practiceName) => {
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      practiceId, 
+                      practiceName 
+                    }));
+                    clearFieldError('practiceId');
+                  }}
+                  placeholder="Select practice *"
+                  style={styles.input}
+                />
+              </View>
               {errors.practiceId && (
                 <Text style={styles.errorText}>
                   {errors.practiceId}
                 </Text>
               )}
 
-              <CustomTextInput
-                label="Cost per Unit (£) *"
-                value={formData.cost}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, cost: text }))}
-                mode="outlined"
-                style={[styles.input, globalFormStyles.hideValidationIndicators]}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                error={!!errors.cost}
-                left={<Text style={styles.currencyIcon}>£</Text>}
-                outlineColor={colors.borderLight}
-                activeOutlineColor={colors.primary}
-                autoComplete="off"
-                textContentType="none"
-                autoCorrect={false}
-                spellCheck={false}
-                right={null}
-              />
+              <View ref={costRef}>
+                <CustomTextInput
+                  label="Cost per Unit (£) *"
+                  value={formData.cost}
+                  onChangeText={(text) => {
+                    setFormData(prev => ({ ...prev, cost: text }));
+                    clearFieldError('cost');
+                  }}
+                  mode="outlined"
+                  style={[styles.input, globalFormStyles.hideValidationIndicators]}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  error={!!errors.cost}
+                  left={<Text style={styles.currencyIcon}>£</Text>}
+                  outlineColor={colors.borderLight}
+                  activeOutlineColor={colors.primary}
+                  autoComplete="off"
+                  textContentType="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  right={null}
+                />
+              </View>
               {errors.cost && (
                 <Text style={styles.errorText}>
                   {errors.cost}
@@ -738,6 +849,23 @@ const ItemDetailScreen = ({ navigation, route }) => {
             </Text>
           </Card.Content>
         </Card>
+
+        {/* Validation Summary */}
+        {Object.keys(errors).length > 0 && (
+          <Card style={[styles.formCard, { backgroundColor: colors.dangerLight + '15', marginBottom: spacing.sm }]}>
+            <Card.Content style={{ paddingVertical: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs }}>
+                <Text style={{ fontSize: 18, marginRight: spacing.sm }}>⚠️</Text>
+                <Title style={[styles.sectionTitle, { color: colors.danger, marginBottom: 0, fontSize: 16 }]}>
+                  Please Complete Required Fields
+                </Title>
+              </View>
+              <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 18 }}>
+                {Object.keys(errors).length} field{Object.keys(errors).length > 1 ? 's' : ''} need{Object.keys(errors).length === 1 ? 's' : ''} your attention. Tap "OK" on the alert to navigate to the first missing field.
+              </Text>
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
